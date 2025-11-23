@@ -86,6 +86,21 @@ For detailed API documentation, visit:
 - API rate limit: 1,000 calls per day for Pro users
 - Some endpoints may require specific parameters - check the API docs
 
+## Git Repository
+
+This project is initialized as a git repository. To push to a remote:
+
+### Quick Setup
+
+Run the interactive setup script:
+```bash
+./setup_remote.sh
+```
+
+### Manual Setup
+
+See [PUSH_INSTRUCTIONS.md](PUSH_INSTRUCTIONS.md) for detailed instructions on pushing to GitHub, GitLab, Bitbucket, or a custom remote.
+
 ## Customization
 
 You can customize the RTW route by modifying the `plan_rtw_trip` method in `RoundTheWorldPlanner` class. The example uses:
