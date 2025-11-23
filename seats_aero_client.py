@@ -12,7 +12,7 @@ load_dotenv()
 class SeatsAeroClient:
     """Client for interacting with the Seats.aero API"""
     
-    BASE_URL = "https://api.seats.aero/v1"
+    BASE_URL = "https://seats.aero/api"
     
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -28,7 +28,7 @@ class SeatsAeroClient:
                 "or pass it as a parameter. Get your key at https://seats.aero/apikey"
             )
         self.headers = {
-            "X-API-Key": self.api_key,
+            "Partner-Authorization": self.api_key,
             "Content-Type": "application/json"
         }
     
