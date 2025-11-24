@@ -69,10 +69,14 @@ def get_flights():
                 'business_seats': flight.get('business_seats', 0),
                 'business_miles': flight.get('business_miles'),
                 'business_miles_int': flight.get('business_miles_int', 0),
+                'premium_economy_seats': flight.get('premium_economy_seats', 0),
+                'premium_economy_miles': flight.get('premium_economy_miles'),
+                'premium_economy_miles_int': flight.get('premium_economy_miles_int', 0),
                 'economy_seats': flight.get('economy_seats', 0),
                 'economy_miles': flight.get('economy_miles'),
                 'economy_miles_int': flight.get('economy_miles_int', 0),
                 'business_carriers': flight.get('business_carriers'),
+                'premium_economy_carriers': flight.get('premium_economy_carriers'),
                 'economy_carriers': flight.get('economy_carriers'),
                 'origin_name': planner.get_airport_name(flight['origin']),
                 'destination_name': planner.get_airport_name(flight['destination'])
@@ -125,7 +129,36 @@ def get_airport_coords():
                 'lon': lon,
                 'name': planner.get_airport_name(airport)
             }
+        else:
+            # Return a default location if coordinates not found (center of world map)
+            # This prevents errors but should be logged
+            print(f"Warning: No coordinates found for airport {airport}")
+            coords[airport] = {
+                'lat': 0.0,
+                'lon': 0.0,
+                'name': planner.get_airport_name(airport)
+            }
     return jsonify(coords)
+
+@app.route('/api/all-airports', methods=['GET'])
+def get_all_airports():
+    """Get all unique airports from CSV and check which ones have coordinates"""
+    if not planner:
+        return jsonify({'error': 'Planner not initialized'}), 500
+    
+    try:
+        all_airports = planner.get_all_airports()
+        airports_with_coords = set(planner.AIRPORT_COORDINATES.keys())
+        missing_coords = sorted(all_airports - airports_with_coords)
+        
+        return jsonify({
+            'total_airports': len(all_airports),
+            'airports_with_coords': len(airports_with_coords),
+            'missing_coords': missing_coords,
+            'missing_count': len(missing_coords)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/validate-trip', methods=['POST'])
 def validate_trip():
