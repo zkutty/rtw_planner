@@ -25,7 +25,43 @@ This project helps you plan a round-the-world ticket using the Seats.aero API, s
 
 ## Usage
 
-### Basic Usage
+### Web Interface (Recommended)
+
+Launch the interactive web-based trip planner with map visualization:
+
+```bash
+python3 app.py
+```
+
+Then open your browser to `http://localhost:5000`
+
+**Features:**
+- Interactive map showing available flight routes
+- Hover over flights to preview routes on the map
+- Click to select flights and build your trip
+- Visual indicators for direct vs connecting flights
+- Real-time distance tracking and 35K mile limit monitoring
+- Undo/redo functionality
+- Date range and cabin class filtering
+- Nearby airport suggestions
+
+### Command Line Interface
+
+#### Interactive Planner
+
+```bash
+python3 interactive_rtw_planner.py "seats.aero qantas Export.csv"
+```
+
+Build your trip step-by-step with interactive prompts.
+
+#### CSV-based Planner
+
+```bash
+python3 plan_rtw_trip_csv.py "seats.aero qantas Export.csv"
+```
+
+### Basic Usage (Python API)
 
 ```python
 from seats_aero_client import SeatsAeroClient, RoundTheWorldPlanner
@@ -54,6 +90,20 @@ python seats_aero_client.py
 
 ## Features
 
+### Web Interface
+- **Interactive Map Visualization**: See available flights on a world map
+- **Route Preview**: Hover over flights to see routes highlighted
+- **Visual Trip Building**: Click flights to build your itinerary
+- **Real-time Validation**: Track distance, segments, and RTW rules
+- **Filtering**: Date range and cabin class filters
+- **Nearby Airports**: Automatic suggestions when no flights found
+
+### Command Line Tools
+- **Interactive Planner**: Step-by-step trip building with prompts
+- **CSV Reader**: Flexible CSV data parsing and searching
+- **Trip Validation**: Automatic oneworld RTW rule checking
+
+### Python API
 - **SeatsAeroClient**: Direct API client for seats.aero
   - Search availability for specific routes
   - Bulk availability searches

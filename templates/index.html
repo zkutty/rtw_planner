@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive RTW Trip Planner</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌍 Round-the-World Trip Planner</h1>
+            <p class="subtitle">oneworld Alliance • Interactive Map Planner</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Control Panel -->
+            <div class="control-panel">
+                <div class="control-panel-content">
+                <div class="panel-section">
+                    <h3>Starting Point</h3>
+                    <div class="input-group">
+                        <label>Starting Airport(s):</label>
+                        <input type="text" id="starting-airports" placeholder="JFK,EWR" value="JFK,EWR">
+                        <small>Enter airport codes separated by commas</small>
+                    </div>
+                    <div class="input-group">
+                        <label>Departure Date:</label>
+                        <input type="date" id="start-date" value="2026-03-29">
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <h3>Filters</h3>
+                    <div class="input-group">
+                        <label>Date Range:</label>
+                        <select id="date-range">
+                            <option value="2">±2 days</option>
+                            <option value="4">±4 days</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Cabin Class:</label>
+                        <select id="cabin-filter">
+                            <option value="">All Classes</option>
+                            <option value="business">Business Only</option>
+                            <option value="economy">Economy Only</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <h3>Trip Summary</h3>
+                    <div id="trip-summary">
+                        <p class="empty-state">No segments selected yet</p>
+                    </div>
+                    <div class="button-group">
+                        <button id="undo-btn" class="btn btn-secondary" disabled>← Undo Last</button>
+                        <button id="clear-btn" class="btn btn-secondary" disabled>Clear All</button>
+                        <button id="validate-btn" class="btn btn-primary" disabled>Validate Trip</button>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <!-- Map Container -->
+            <div class="map-container">
+                <div id="map"></div>
+                <div class="map-legend">
+                    <div class="legend-item">
+                        <span class="legend-line direct"></span>
+                        <span>Direct Flight</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-line connecting"></span>
+                        <span>Connecting Flight</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-line selected"></span>
+                        <span>Selected Route</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flight Options Sidebar -->
+        <div class="sidebar" id="flight-sidebar">
+            <div class="sidebar-header">
+                <h3>Available Flights</h3>
+                <button class="close-btn" id="close-sidebar">×</button>
+            </div>
+            <div class="sidebar-content" id="flight-list">
+                <p class="empty-state">Select an airport to see available flights</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Validation Modal -->
+    <div id="validation-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Trip Validation</h2>
+            <div id="validation-results"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
+
