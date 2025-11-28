@@ -27,18 +27,26 @@ class OneWorldRTWValidator:
         'Asia': ['HKG', 'NRT', 'HND', 'ICN', 'PEK', 'PVG', 'SIN', 'BKK', 'KUL', 'TPE', 
                 'DEL', 'BOM', 'DXB', 'DOH', 'AUH', 'IST'],
         'Oceania': ['SYD', 'MEL', 'BNE', 'PER', 'AKL', 'WLG', 'NAN', 'PPT'],
-        'Africa': ['JNB', 'CPT', 'CAI', 'ADD', 'NBO', 'DAR']
+        'Africa': ['JNB', 'CPT', 'CAI', 'ADD', 'NBO', 'DAR', 'CMN']
     }
     
     # Ocean crossings
     ATLANTIC_CROSSING = {
         'from': ['JFK', 'EWR', 'BOS', 'MIA', 'YYZ', 'YUL'],
-        'to': ['LHR', 'LGW', 'CDG', 'FRA', 'AMS', 'MAD', 'BCN', 'LIS', 'DUB', 'CPH']
+        'to': ['LHR', 'LGW', 'CDG', 'FRA', 'AMS', 'MAD', 'BCN', 'LIS', 'DUB', 'CPH', 'HEL', 'ARN', 'OSL', 'VIE', 'MUC', 'ZRH', 'FCO', 'MXP', 'ATH']
     }
     
     PACIFIC_CROSSING = {
-        'from': ['LAX', 'SFO', 'SEA', 'YVR', 'SYD', 'MEL', 'AKL', 'HKG', 'NRT', 'HND', 'ICN'],
-        'to': ['SYD', 'MEL', 'AKL', 'HKG', 'NRT', 'HND', 'ICN', 'LAX', 'SFO', 'SEA', 'YVR']
+        # Pacific crossings: Oceania/Asia <-> Americas
+        # Only include airports that are actually on Pacific routes
+        'from': ['LAX', 'SFO', 'SEA', 'YVR',  # West Coast North America
+                 'SYD', 'MEL', 'BNE', 'PER', 'AKL', 'WLG',  # Oceania
+                 'HKG', 'NRT', 'HND', 'ICN', 'PEK', 'PVG', 'SIN', 'BKK',  # Asia
+                 'SCL', 'LIM'],  # West Coast South America (Pacific side)
+        'to': ['SYD', 'MEL', 'BNE', 'PER', 'AKL', 'WLG',  # Oceania
+               'HKG', 'NRT', 'HND', 'ICN', 'PEK', 'PVG', 'SIN', 'BKK',  # Asia
+               'LAX', 'SFO', 'SEA', 'YVR',  # West Coast North America
+               'SCL', 'LIM']  # West Coast South America (Pacific side)
     }
     
     @staticmethod
@@ -48,6 +56,32 @@ class OneWorldRTWValidator:
         for continent, airports in OneWorldRTWValidator.CONTINENTS.items():
             if airport in airports:
                 return continent
+        return None
+    
+    @staticmethod
+    def get_zone(airport: str) -> Optional[str]:
+        """
+        Get the geographic zone for an airport code.
+        Zones are used to determine ocean crossings:
+        - Zone 1 (Americas): North America + South America
+        - Zone 2 (Europe/Africa): Europe + Africa
+        - Zone 3 (Asia/Oceania): Asia + Oceania
+        
+        Ocean crossings only count when moving between zones:
+        - Atlantic: Zone 1 ↔ Zone 2
+        - Pacific: Zone 1 ↔ Zone 3
+        """
+        continent = OneWorldRTWValidator.get_continent(airport)
+        if not continent:
+            return None
+        
+        if continent in ['North America', 'South America']:
+            return 'Americas'
+        elif continent in ['Europe', 'Africa']:
+            return 'Europe/Africa'
+        elif continent in ['Asia', 'Oceania']:
+            return 'Asia/Oceania'
+        
         return None
     
     @staticmethod
@@ -92,21 +126,24 @@ class OneWorldRTWValidator:
             origin_airport = segment['origin'].upper()
             dest_airport = segment['destination'].upper()
             
-            # Check Atlantic crossing (East to West or West to East)
-            if (origin_airport in OneWorldRTWValidator.ATLANTIC_CROSSING['from'] and 
-                dest_airport in OneWorldRTWValidator.ATLANTIC_CROSSING['to']):
-                atlantic_crossed = True
-            elif (origin_airport in OneWorldRTWValidator.ATLANTIC_CROSSING['to'] and 
-                  dest_airport in OneWorldRTWValidator.ATLANTIC_CROSSING['from']):
-                atlantic_crossed = True
+            # Check Atlantic crossing using zone-based logic
+            # Atlantic crossing: Zone 1 (Americas) ↔ Zone 2 (Europe/Africa)
+            origin_zone = OneWorldRTWValidator.get_zone(origin_airport)
+            dest_zone = OneWorldRTWValidator.get_zone(dest_airport)
             
-            # Check Pacific crossing
-            if (origin_airport in OneWorldRTWValidator.PACIFIC_CROSSING['from'] and 
-                dest_airport in OneWorldRTWValidator.PACIFIC_CROSSING['to']):
-                pacific_crossed = True
-            elif (origin_airport in OneWorldRTWValidator.PACIFIC_CROSSING['to'] and 
-                  dest_airport in OneWorldRTWValidator.PACIFIC_CROSSING['from']):
-                pacific_crossed = True
+            if origin_zone and dest_zone:
+                # Atlantic crossing: Americas ↔ Europe/Africa
+                if ((origin_zone == 'Americas' and dest_zone == 'Europe/Africa') or
+                    (origin_zone == 'Europe/Africa' and dest_zone == 'Americas')):
+                    atlantic_crossed = True
+            
+            # Check Pacific crossing using zone-based logic
+            # Pacific crossing: Zone 1 (Americas) ↔ Zone 3 (Asia/Oceania)
+            if origin_zone and dest_zone:
+                # Pacific crossing: Americas ↔ Asia/Oceania
+                if ((origin_zone == 'Americas' and dest_zone == 'Asia/Oceania') or
+                    (origin_zone == 'Asia/Oceania' and dest_zone == 'Americas')):
+                    pacific_crossed = True
         
         if not atlantic_crossed:
             errors.append("Must cross Atlantic Ocean at least once")
@@ -121,16 +158,31 @@ class OneWorldRTWValidator:
             origin_airport = segment['origin'].upper()
             dest_airport = segment['destination'].upper()
             
-            if ((origin_airport in OneWorldRTWValidator.ATLANTIC_CROSSING['from'] and 
-                 dest_airport in OneWorldRTWValidator.ATLANTIC_CROSSING['to']) or
-                (origin_airport in OneWorldRTWValidator.ATLANTIC_CROSSING['to'] and 
-                 dest_airport in OneWorldRTWValidator.ATLANTIC_CROSSING['from'])):
+            # Check Atlantic crossing using zone-based logic
+            # Atlantic crossing: Zone 1 (Americas) ↔ Zone 2 (Europe/Africa)
+            origin_zone = OneWorldRTWValidator.get_zone(origin_airport)
+            dest_zone = OneWorldRTWValidator.get_zone(dest_airport)
+            
+            is_atlantic_crossing = False
+            if origin_zone and dest_zone:
+                # Atlantic crossing: Americas ↔ Europe/Africa
+                if ((origin_zone == 'Americas' and dest_zone == 'Europe/Africa') or
+                    (origin_zone == 'Europe/Africa' and dest_zone == 'Americas')):
+                    is_atlantic_crossing = True
+            
+            if is_atlantic_crossing:
                 atlantic_crossings += 1
             
-            if ((origin_airport in OneWorldRTWValidator.PACIFIC_CROSSING['from'] and 
-                 dest_airport in OneWorldRTWValidator.PACIFIC_CROSSING['to']) or
-                (origin_airport in OneWorldRTWValidator.PACIFIC_CROSSING['to'] and 
-                 dest_airport in OneWorldRTWValidator.PACIFIC_CROSSING['from'])):
+            # Check Pacific crossing using zone-based logic
+            # Pacific crossing: Zone 1 (Americas) ↔ Zone 3 (Asia/Oceania)
+            is_pacific_crossing = False
+            if origin_zone and dest_zone:
+                # Pacific crossing: Americas ↔ Asia/Oceania
+                if ((origin_zone == 'Americas' and dest_zone == 'Asia/Oceania') or
+                    (origin_zone == 'Asia/Oceania' and dest_zone == 'Americas')):
+                    is_pacific_crossing = True
+            
+            if is_pacific_crossing:
                 pacific_crossings += 1
         
         if atlantic_crossings > 1:

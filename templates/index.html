@@ -16,6 +16,9 @@
         <header>
             <h1>🌍 Round-the-World Trip Planner</h1>
             <p class="subtitle">oneworld Alliance • Interactive Map Planner</p>
+            <div style="text-align: center; margin-top: 0.5rem;">
+                <a href="/suggestions" style="color: #667eea; text-decoration: none; font-weight: 500;">🔍 Try Trip Suggestions</a>
+            </div>
         </header>
 
         <div class="main-content">
@@ -23,15 +26,33 @@
             <div class="control-panel">
                 <div class="control-panel-content">
                 <div class="panel-section">
-                    <h3>Starting Point</h3>
+                    <h3>Trip Constraints</h3>
                     <div class="input-group">
                         <label>Starting Airport(s):</label>
                         <input type="text" id="starting-airports" placeholder="JFK,EWR" value="JFK">
                         <small>Enter airport codes separated by commas</small>
                     </div>
                     <div class="input-group">
-                        <label>Departure Date:</label>
-                        <input type="date" id="start-date" value="2026-03-29">
+                        <label>Start Date:</label>
+                        <input type="date" id="start-date" value="2026-03-27">
+                    </div>
+                    <div class="input-group">
+                        <label>End Date (Return by):</label>
+                        <input type="date" id="end-date" value="2026-04-25">
+                        <small>Filter return flights around this date</small>
+                    </div>
+                    <div class="input-group">
+                        <label>Must-Visit Cities:</label>
+                        <input type="text" id="must-visit-cities" placeholder="SYD,HKG,SCL" value="">
+                        <small>Airport codes separated by commas (must be included in trip)</small>
+                    </div>
+                    <div class="input-group">
+                        <label>Planning Direction:</label>
+                        <select id="planning-direction">
+                            <option value="forward">Forward (Start → End)</option>
+                            <option value="backward">Backward (End → Start)</option>
+                        </select>
+                        <small>Work forwards from start or backwards from end</small>
                     </div>
                     <div class="button-group">
                         <button id="load-flights-btn" class="btn btn-primary">Load Flights</button>
@@ -43,8 +64,11 @@
                     <div class="input-group">
                         <label>Date Range:</label>
                         <select id="date-range">
+                            <option value="1" selected>±1 day</option>
                             <option value="2">±2 days</option>
+                            <option value="3">±3 days</option>
                             <option value="4">±4 days</option>
+                            <option value="5">±5 days</option>
                         </select>
                     </div>
                     <div class="input-group">
@@ -52,6 +76,7 @@
                         <select id="cabin-filter">
                             <option value="">All Classes</option>
                             <option value="business">Business Only</option>
+                            <option value="premium" selected>Premium Economy & Business</option>
                             <option value="economy">Economy Only</option>
                         </select>
                     </div>
@@ -78,21 +103,6 @@
                     </div>
                 </div>
 
-                <div class="panel-section">
-                    <h3>Trip Summary</h3>
-                    <div id="trip-summary">
-                        <p class="empty-state">No segments selected yet</p>
-                    </div>
-                    <div id="trip-requirements" style="margin-top: 1rem; padding: 0.75rem; background: #f9f9f9; border-radius: 4px; font-size: 0.8rem; display: none;">
-                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: #667eea;">oneworld RTW Requirements</h4>
-                        <div id="requirements-status"></div>
-                    </div>
-                    <div class="button-group">
-                        <button id="undo-btn" class="btn btn-secondary" disabled>← Undo Last</button>
-                        <button id="clear-btn" class="btn btn-secondary" disabled>Clear All</button>
-                        <button id="validate-btn" class="btn btn-primary" disabled>Validate Trip</button>
-                    </div>
-                </div>
 
                 <div class="panel-section">
                     <h3>Legend</h3>
@@ -117,6 +127,31 @@
             <!-- Map Container -->
             <div class="map-container">
                 <div id="map"></div>
+            </div>
+        </div>
+        
+        <!-- Bottom Panel - Trip Summary & Actions -->
+        <div class="bottom-panel">
+            <div class="bottom-panel-content">
+                <div class="bottom-panel-section">
+                    <h3>Trip Summary</h3>
+                    <div id="trip-summary">
+                        <p class="empty-state">No segments selected yet</p>
+                    </div>
+                </div>
+                <div class="bottom-panel-section">
+                    <div id="trip-requirements" style="padding: 0.75rem; background: #f9f9f9; border-radius: 4px; font-size: 0.8rem; display: none;">
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: #667eea;">oneworld RTW Requirements</h4>
+                        <div id="requirements-status"></div>
+                    </div>
+                </div>
+                <div class="bottom-panel-section">
+                    <div class="button-group" style="display: flex; gap: 0.5rem;">
+                        <button id="undo-btn" class="btn btn-secondary" disabled>← Undo Last</button>
+                        <button id="clear-btn" class="btn btn-secondary" disabled>Clear All</button>
+                        <button id="validate-btn" class="btn btn-primary" disabled>Validate Trip</button>
+                    </div>
+                </div>
             </div>
         </div>
 

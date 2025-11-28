@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTW Trip Suggestions</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .suggestions-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .suggestions-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .suggestions-header h1 {
+            margin: 0;
+            color: #333;
+        }
+        .suggestions-header .subtitle {
+            color: #666;
+            margin-top: 0.5rem;
+        }
+        .nav-links {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .nav-links a {
+            color: #667eea;
+            text-decoration: none;
+            margin: 0 1rem;
+            font-weight: 500;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+        .filters-panel {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .filters-panel h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #333;
+        }
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .input-group small {
+            display: block;
+            margin-top: 0.25rem;
+            color: #666;
+            font-size: 0.85rem;
+        }
+        .search-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        .search-btn:hover {
+            background: #5568d3;
+        }
+        .search-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+        .progress-bar-container {
+            width: 100%;
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .progress-text {
+            margin-top: 0.5rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .suggestions-results {
+            display: grid;
+            gap: 1.5rem;
+        }
+        .suggestion-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .suggestion-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        .suggestion-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+        .suggestion-badge {
+            background: #4CAF50;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .suggestion-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .stat-item {
+            text-align: center;
+            padding: 0.75rem;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        .stat-label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+        }
+        .suggestion-segments {
+            margin-top: 1rem;
+        }
+        .segment-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: #f9f9f9;
+            border-radius: 4px;
+            border-left: 3px solid #667eea;
+        }
+        .segment-route {
+            font-weight: 600;
+            color: #333;
+        }
+        .segment-details {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+        .cabin-badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-left: 0.5rem;
+        }
+        .cabin-business {
+            background: #667eea;
+            color: white;
+        }
+        .cabin-premium {
+            background: #4CAF50;
+            color: white;
+        }
+        .cabin-economy {
+            background: #FF9800;
+            color: white;
+        }
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+        .no-results {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="suggestions-container">
+        <div class="suggestions-header">
+            <h1>🌍 RTW Trip Suggestions</h1>
+            <p class="subtitle">AI-Powered Round-the-World Trip Finder</p>
+        </div>
+        
+        <div class="nav-links">
+            <a href="/">← Back to Interactive Planner</a>
+        </div>
+        
+        <div class="filters-panel">
+            <h2>Trip Parameters</h2>
+            <div class="filters-grid">
+                <div class="input-group">
+                    <label>Start Airport(s):</label>
+                    <input type="text" id="start-airports" placeholder="JFK,EWR" value="JFK">
+                    <small>Enter airport codes separated by commas</small>
+                </div>
+                <div class="input-group">
+                    <label>End Airport(s):</label>
+                    <input type="text" id="end-airports" placeholder="JFK,EWR" value="JFK">
+                    <small>Can be same as start (round trip)</small>
+                </div>
+                <div class="input-group">
+                    <label>Start Date:</label>
+                    <input type="date" id="start-date" value="2026-03-29">
+                </div>
+                <div class="input-group">
+                    <label>End Date (Return By):</label>
+                    <input type="date" id="end-date" placeholder="Optional">
+                    <small>Leave empty for flexible return</small>
+                </div>
+                <div class="input-group">
+                    <label>Must-Visit Cities:</label>
+                    <input type="text" id="must-visit" placeholder="SYD,HKG,SCL">
+                    <small>Airport codes separated by commas</small>
+                </div>
+                <div class="input-group">
+                    <label>Min Stopovers (24h+):</label>
+                    <input type="number" id="min-stopovers" min="3" max="10" value="3">
+                    <small>Minimum 3, maximum 10</small>
+                </div>
+                <div class="input-group">
+                    <label>Max Stopovers (24h+):</label>
+                    <input type="number" id="max-stopovers" min="3" max="5" value="5">
+                    <small>Maximum 5</small>
+                </div>
+                <div class="input-group">
+                    <label>Max Segments:</label>
+                    <input type="number" id="max-segments" min="3" max="16" value="16">
+                    <small>Can include <24h connections</small>
+                </div>
+            </div>
+            <button id="search-btn" class="search-btn">Find Trip Suggestions</button>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            <p>🔍 Searching for trip suggestions... This may take a minute.</p>
+            <div class="progress-bar-container">
+                <div id="progress-bar" class="progress-bar">0%</div>
+            </div>
+            <div id="progress-text" class="progress-text">Initializing search...</div>
+        </div>
+        
+        <div id="error-message" class="error-message" style="display: none;"></div>
+        
+        <div id="suggestions-results" class="suggestions-results"></div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/suggestions.js') }}"></script>
+</body>
+</html>
+
