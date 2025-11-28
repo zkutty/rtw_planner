@@ -623,3 +623,324 @@ header h1 {
     margin-bottom: var(--spacing-sm);
     font-size: 0.9rem;
 }
+
+/* =============================================================================
+   MOBILE RESPONSIVE STYLES
+   ============================================================================= */
+
+/* Mobile menu toggle button */
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 2000;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    font-size: 1.5rem;
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+}
+
+/* Tablet styles (768px and below) */
+@media screen and (max-width: 768px) {
+    :root {
+        --control-panel-width: 280px;
+        --sidebar-width: 100%;
+        --bottom-panel-height: 160px;
+    }
+    
+    header {
+        padding: var(--spacing-md);
+    }
+    
+    header h1 {
+        font-size: 1.2rem;
+    }
+    
+    .subtitle {
+        font-size: var(--font-size-xs);
+    }
+    
+    .main-content {
+        flex-direction: column;
+    }
+    
+    /* Control panel becomes a slide-out drawer */
+    .control-panel {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: var(--control-panel-width);
+        z-index: 1500;
+        transform: translateX(-100%);
+        transition: transform var(--transition-normal);
+    }
+    
+    .control-panel.open {
+        transform: translateX(0);
+    }
+    
+    /* Show toggle button on mobile */
+    .mobile-menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* Map takes full space */
+    .map-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: var(--bottom-panel-height);
+    }
+    
+    /* Bottom panel adjustments */
+    .bottom-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: var(--bottom-panel-height);
+    }
+    
+    .bottom-panel-content {
+        padding: var(--spacing-sm);
+        gap: var(--spacing-md);
+    }
+    
+    .bottom-panel-section {
+        min-width: 200px;
+    }
+    
+    /* Sidebar full width on tablet */
+    .sidebar {
+        width: 100%;
+        max-width: 400px;
+        bottom: var(--bottom-panel-height);
+    }
+    
+    /* Overlay when panels are open */
+    .panel-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 1400;
+    }
+    
+    .panel-overlay.show {
+        display: block;
+    }
+}
+
+/* Mobile styles (480px and below) */
+@media screen and (max-width: 480px) {
+    :root {
+        --control-panel-width: 100%;
+        --bottom-panel-height: 140px;
+        --font-size-sm: 0.8rem;
+        --font-size-xs: 0.7rem;
+    }
+    
+    header {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+    
+    header h1 {
+        font-size: 1.1rem;
+    }
+    
+    .subtitle {
+        display: none;
+    }
+    
+    /* Control panel full width */
+    .control-panel {
+        width: 100%;
+        max-height: 70vh;
+        top: auto;
+        bottom: 0;
+        transform: translateY(100%);
+    }
+    
+    .control-panel.open {
+        transform: translateY(0);
+    }
+    
+    .control-panel-content {
+        padding: var(--spacing-md);
+    }
+    
+    .panel-section {
+        margin-bottom: var(--spacing-md);
+        padding-bottom: var(--spacing-md);
+    }
+    
+    /* Map adjustments */
+    .map-container {
+        bottom: var(--bottom-panel-height);
+    }
+    
+    /* Bottom panel - stack vertically */
+    .bottom-panel {
+        height: auto;
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+    
+    .bottom-panel-content {
+        flex-direction: column;
+        min-width: 100%;
+        padding: var(--spacing-sm);
+    }
+    
+    .bottom-panel-section {
+        min-width: 100%;
+        max-width: 100%;
+    }
+    
+    .bottom-panel-section .button-group {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    
+    .bottom-panel-section .btn {
+        flex: 1;
+        min-width: 80px;
+        font-size: var(--font-size-xs);
+        padding: var(--spacing-sm);
+    }
+    
+    /* Sidebar full width */
+    .sidebar {
+        width: 100%;
+        max-width: 100%;
+        bottom: 0;
+        top: 60px;
+    }
+    
+    .sidebar-content {
+        padding: var(--spacing-sm);
+    }
+    
+    /* Flight items compact */
+    .flight-item {
+        padding: var(--spacing-sm);
+        margin-bottom: var(--spacing-sm);
+    }
+    
+    .flight-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-xs);
+    }
+    
+    .flight-route {
+        font-size: var(--font-size-sm);
+    }
+    
+    .flight-badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+    }
+    
+    /* Modal full screen on mobile */
+    .modal-content {
+        width: 95%;
+        max-width: 100%;
+        max-height: 90vh;
+        margin: var(--spacing-md);
+        padding: var(--spacing-lg);
+    }
+    
+    /* Input adjustments */
+    .input-group input,
+    .input-group select {
+        font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+    
+    /* Trip summary compact */
+    #trip-summary {
+        max-height: 100px;
+        font-size: var(--font-size-xs);
+    }
+    
+    .trip-segment {
+        padding: var(--spacing-sm);
+    }
+    
+    .trip-segment-header {
+        font-size: var(--font-size-xs);
+    }
+    
+    /* Mobile menu toggle position */
+    .mobile-menu-toggle {
+        bottom: calc(var(--bottom-panel-height) + 10px);
+        width: 45px;
+        height: 45px;
+        font-size: 1.3rem;
+    }
+}
+
+/* Landscape mode on mobile */
+@media screen and (max-width: 768px) and (orientation: landscape) {
+    :root {
+        --bottom-panel-height: 100px;
+    }
+    
+    header {
+        padding: var(--spacing-xs) var(--spacing-md);
+    }
+    
+    header h1 {
+        font-size: 1rem;
+    }
+    
+    .bottom-panel-content {
+        flex-direction: row;
+        overflow-x: auto;
+    }
+    
+    .bottom-panel-section {
+        min-width: 180px;
+    }
+}
+
+/* Touch-friendly adjustments */
+@media (hover: none) and (pointer: coarse) {
+    .btn {
+        min-height: 44px; /* Apple's recommended touch target */
+        padding: var(--spacing-md);
+    }
+    
+    .close-btn {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .flight-item {
+        padding: var(--spacing-md);
+    }
+    
+    /* Disable hover effects on touch devices */
+    .flight-item:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    
+    .flight-item:active {
+        border-color: var(--color-primary);
+        background: #f0f4ff;
+    }
+}

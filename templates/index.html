@@ -176,11 +176,52 @@
         </div>
     </div>
 
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle Menu">☰</button>
+    
+    <!-- Panel Overlay (for mobile) -->
+    <div class="panel-overlay" id="panel-overlay"></div>
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <!-- Mobile Menu Script -->
+    <script>
+        // Mobile menu toggle
+        const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+        const controlPanel = document.querySelector('.control-panel');
+        const panelOverlay = document.getElementById('panel-overlay');
+        
+        if (mobileMenuToggle && controlPanel && panelOverlay) {
+            mobileMenuToggle.addEventListener('click', () => {
+                controlPanel.classList.toggle('open');
+                panelOverlay.classList.toggle('show');
+                mobileMenuToggle.textContent = controlPanel.classList.contains('open') ? '✕' : '☰';
+            });
+            
+            panelOverlay.addEventListener('click', () => {
+                controlPanel.classList.remove('open');
+                panelOverlay.classList.remove('show');
+                mobileMenuToggle.textContent = '☰';
+            });
+        }
+        
+        // Close mobile menu when a flight is loaded
+        const originalLoadFlights = window.loadFlightsFromAirport;
+        if (originalLoadFlights) {
+            window.loadFlightsFromAirport = function(...args) {
+                if (window.innerWidth <= 768) {
+                    controlPanel?.classList.remove('open');
+                    panelOverlay?.classList.remove('show');
+                    if (mobileMenuToggle) mobileMenuToggle.textContent = '☰';
+                }
+                return originalLoadFlights.apply(this, args);
+            };
+        }
+    </script>
 </body>
 </html>
 
