@@ -18,16 +18,34 @@ planner = None
 _flight_index_by_origin = {}
 _flight_index_by_destination = {}
 _data_initialized = False
+_init_error = None
 
 
 def init_planner():
     """Initialize the planner with CSV data and build indexes"""
-    global planner, _flight_index_by_origin, _flight_index_by_destination, _data_initialized
+    global planner, _flight_index_by_origin, _flight_index_by_destination, _data_initialized, _init_error
     
     from interactive_rtw_planner import InteractiveRTWPlanner
     
-    csv_file = os.environ.get('CSV_FILE', 'seats.aero qantas Export.csv')
-    if not os.path.exists(csv_file):
+    # Try multiple CSV file names
+    csv_candidates = [
+        os.environ.get('CSV_FILE', ''),
+        'flights.csv',
+        'seats.aero qantas Export.csv',
+        'data.csv',
+        'availability.csv'
+    ]
+    
+    csv_file = None
+    for candidate in csv_candidates:
+        if candidate and os.path.exists(candidate):
+            csv_file = candidate
+            break
+    
+    if not csv_file:
+        _init_error = "No CSV file found. Please upload a CSV file named 'flights.csv'"
+        print(f"❌ {_init_error}")
+        print(f"   Looked for: {[c for c in csv_candidates if c]}")
         return False
     
     planner = InteractiveRTWPlanner(csv_file)
@@ -256,7 +274,47 @@ def parse_row_to_flight(row: dict, target_date: str, date_range: int) -> dict | 
 @app.route('/')
 def index():
     """Serve the main page"""
+    if _init_error:
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>RTW Planner - Setup Required</title>
+        <style>
+            body {{ font-family: -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }}
+            h1 {{ color: #667eea; }}
+            .error {{ background: #ffebee; padding: 15px; border-radius: 8px; color: #c62828; }}
+            .instructions {{ background: #e3f2fd; padding: 15px; border-radius: 8px; margin-top: 20px; }}
+            code {{ background: #f5f5f5; padding: 2px 6px; border-radius: 4px; }}
+        </style>
+        </head>
+        <body>
+            <h1>🌍 RTW Trip Planner</h1>
+            <div class="error"><strong>Setup Required:</strong> {_init_error}</div>
+            <div class="instructions">
+                <h3>To fix this:</h3>
+                <ol>
+                    <li>Upload your flight data CSV file to this server</li>
+                    <li>Name it <code>flights.csv</code> or set the <code>CSV_FILE</code> environment variable</li>
+                    <li>Restart the application</li>
+                </ol>
+                <p><strong>Required CSV columns:</strong> Origin Airport, Destination Airport, Date, Business Miles, Economy Miles, etc.</p>
+            </div>
+        </body>
+        </html>
+        """, 503
     return render_template('index.html')
+
+
+@app.route('/api/status')
+def status():
+    """Health check and status endpoint"""
+    return jsonify({
+        'status': 'ok' if _data_initialized else 'error',
+        'initialized': _data_initialized,
+        'error': _init_error,
+        'origins_indexed': len(_flight_index_by_origin),
+        'destinations_indexed': len(_flight_index_by_destination)
+    })
 
 
 @app.route('/suggestions')
@@ -664,13 +722,22 @@ def generate_trip_suggestions(start_airports, end_airports, start_date, end_date
     return suggestions[:max_suggestions]
 
 
-if __name__ == '__main__':
+def start_app():
+    """Initialize and start the application"""
     if init_planner():
         print("✓ Planner initialized successfully")
         print(f"  Indexed {len(_flight_index_by_origin)} origin airports")
         print(f"  Indexed {len(_flight_index_by_destination)} destination airports")
-        port = int(os.environ.get('PORT', 5001))
-        print(f"🌐 Starting web server on http://localhost:{port}")
-        app.run(debug=True, port=port)
     else:
-        print("❌ Failed to initialize planner - CSV file not found")
+        print("⚠️  Starting without data - setup page will be shown")
+
+
+# Initialize on import (for gunicorn)
+start_app()
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5001))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    print(f"🌐 Starting web server on http://localhost:{port}")
+    app.run(debug=debug, host='0.0.0.0', port=port)
