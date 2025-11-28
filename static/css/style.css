@@ -1,3 +1,67 @@
+/**
+ * RTW Trip Planner - Optimized Stylesheet
+ * Clean, maintainable CSS with CSS custom properties
+ */
+
+/* =============================================================================
+   CSS CUSTOM PROPERTIES
+   ============================================================================= */
+
+:root {
+    /* Colors */
+    --color-primary: #667eea;
+    --color-primary-hover: #5568d3;
+    --color-secondary: #764ba2;
+    --color-success: #4CAF50;
+    --color-warning: #FF9800;
+    --color-error: #f44336;
+    --color-text: #333;
+    --color-text-light: #666;
+    --color-text-muted: #999;
+    --color-bg: #f5f5f5;
+    --color-bg-white: #fff;
+    --color-border: #e0e0e0;
+    --color-border-light: #ddd;
+    
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 0.75rem;
+    --spacing-lg: 1rem;
+    --spacing-xl: 1.5rem;
+    
+    /* Typography */
+    --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.85rem;
+    --font-size-md: 1rem;
+    --font-size-lg: 1.5rem;
+    
+    /* Borders */
+    --border-radius: 4px;
+    --border-radius-lg: 6px;
+    --border-radius-round: 50%;
+    
+    /* Shadows */
+    --shadow-sm: 0 2px 6px rgba(0,0,0,0.1);
+    --shadow-md: 0 2px 10px rgba(0,0,0,0.1);
+    --shadow-lg: 0 2px 8px rgba(102, 126, 234, 0.2);
+    
+    /* Transitions */
+    --transition-fast: 0.2s ease;
+    --transition-normal: 0.3s ease;
+    
+    /* Layout */
+    --control-panel-width: 320px;
+    --sidebar-width: 380px;
+    --bottom-panel-height: 200px;
+    --header-height: auto;
+}
+
+/* =============================================================================
+   RESET & BASE
+   ============================================================================= */
+
 * {
     margin: 0;
     padding: 0;
@@ -5,12 +69,16 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: #f5f5f5;
-    color: #333;
+    font-family: var(--font-family);
+    background: var(--color-bg);
+    color: var(--color-text);
     overflow: hidden;
     height: 100vh;
 }
+
+/* =============================================================================
+   LAYOUT
+   ============================================================================= */
 
 .container {
     display: flex;
@@ -20,21 +88,21 @@ body {
 }
 
 header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
     color: white;
-    padding: 1rem 1.5rem;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: var(--spacing-lg) var(--spacing-xl);
+    box-shadow: var(--shadow-md);
     flex-shrink: 0;
 }
 
 header h1 {
-    font-size: 1.5rem;
-    margin-bottom: 0.2rem;
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--spacing-xs);
 }
 
 .subtitle {
     opacity: 0.9;
-    font-size: 0.85rem;
+    font-size: var(--font-size-sm);
 }
 
 .main-content {
@@ -45,10 +113,14 @@ header h1 {
     position: relative;
 }
 
+/* =============================================================================
+   CONTROL PANEL
+   ============================================================================= */
+
 .control-panel {
-    width: 320px;
-    background: white;
-    border-right: 1px solid #e0e0e0;
+    width: var(--control-panel-width);
+    background: var(--color-bg-white);
+    border-right: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -58,13 +130,13 @@ header h1 {
 .control-panel-content {
     flex: 1;
     overflow-y: auto;
-    padding: 1rem;
+    padding: var(--spacing-lg);
 }
 
 .panel-section {
     margin-bottom: 1.25rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border);
 }
 
 .panel-section:last-child {
@@ -73,62 +145,70 @@ header h1 {
 }
 
 .panel-section h3 {
-    font-size: 1rem;
-    margin-bottom: 0.75rem;
-    color: #667eea;
+    font-size: var(--font-size-md);
+    margin-bottom: var(--spacing-md);
+    color: var(--color-primary);
     font-weight: 600;
 }
 
+/* =============================================================================
+   FORM ELEMENTS
+   ============================================================================= */
+
 .input-group {
-    margin-bottom: 0.75rem;
+    margin-bottom: var(--spacing-md);
 }
 
 .input-group label {
     display: block;
     margin-bottom: 0.4rem;
     font-weight: 500;
-    font-size: 0.85rem;
+    font-size: var(--font-size-sm);
     color: #555;
 }
 
 .input-group input,
 .input-group select {
     width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    transition: border-color 0.2s;
+    padding: var(--spacing-sm);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-sm);
+    transition: border-color var(--transition-fast);
 }
 
 .input-group input:focus,
 .input-group select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--color-primary);
 }
 
 .input-group small {
     display: block;
-    margin-top: 0.25rem;
-    font-size: 0.75rem;
+    margin-top: var(--spacing-xs);
+    font-size: var(--font-size-xs);
     color: #888;
 }
+
+/* =============================================================================
+   BUTTONS
+   ============================================================================= */
 
 .button-group {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 0.75rem;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
 }
 
 .btn {
-    padding: 0.6rem 0.75rem;
+    padding: 0.6rem var(--spacing-md);
     border: none;
-    border-radius: 4px;
-    font-size: 0.85rem;
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-sm);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-fast);
 }
 
 .btn:disabled {
@@ -137,62 +217,71 @@ header h1 {
 }
 
 .btn-primary {
-    background: #667eea;
+    background: var(--color-primary);
     color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: #5568d3;
+    background: var(--color-primary-hover);
 }
 
 .btn-secondary {
     background: #f0f0f0;
-    color: #333;
+    color: var(--color-text);
 }
 
 .btn-secondary:hover:not(:disabled) {
     background: #e0e0e0;
 }
 
+/* =============================================================================
+   TRIP SUMMARY
+   ============================================================================= */
+
 #trip-summary {
     background: #f9f9f9;
-    border-radius: 4px;
-    padding: 0.75rem;
-    max-height: 200px;
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    max-height: 140px;
     overflow-y: auto;
-    font-size: 0.85rem;
+    overflow-x: hidden;
+    font-size: var(--font-size-sm);
 }
 
 .trip-segment {
     padding: 0.6rem;
     margin-bottom: 0.4rem;
-    background: white;
-    border-radius: 4px;
-    border-left: 3px solid #667eea;
+    background: var(--color-bg-white);
+    border-radius: var(--border-radius);
+    border-left: 3px solid var(--color-primary);
 }
 
 .trip-segment-header {
     font-weight: 600;
-    margin-bottom: 0.2rem;
-    font-size: 0.85rem;
+    margin-bottom: var(--spacing-xs);
+    font-size: var(--font-size-sm);
 }
 
 .trip-segment-details {
-    font-size: 0.75rem;
-    color: #666;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-light);
 }
 
 .empty-state {
-    color: #999;
+    color: var(--color-text-muted);
     font-style: italic;
     text-align: center;
     padding: 2rem;
 }
 
+/* =============================================================================
+   MAP
+   ============================================================================= */
+
 .map-container {
     flex: 1;
     position: relative;
-    background: #e0e0e0;
+    background: var(--color-border);
     min-width: 0;
     min-height: 0;
 }
@@ -203,11 +292,14 @@ header h1 {
     min-height: 0;
 }
 
-/* Bottom Panel for Trip Summary */
+/* =============================================================================
+   BOTTOM PANEL
+   ============================================================================= */
+
 .bottom-panel {
-    height: 200px;
-    background: white;
-    border-top: 1px solid #e0e0e0;
+    height: var(--bottom-panel-height);
+    background: var(--color-bg-white);
+    border-top: 1px solid var(--color-border);
     flex-shrink: 0;
     overflow-x: auto;
     overflow-y: hidden;
@@ -218,8 +310,8 @@ header h1 {
 
 .bottom-panel-content {
     display: flex;
-    gap: 1.5rem;
-    padding: 1rem;
+    gap: var(--spacing-xl);
+    padding: var(--spacing-lg);
     min-width: max-content;
     height: 100%;
     align-items: flex-start;
@@ -240,31 +332,25 @@ header h1 {
 }
 
 .bottom-panel-section h3 {
-    font-size: 1rem;
-    margin-bottom: 0.75rem;
-    color: #667eea;
+    font-size: var(--font-size-md);
+    margin-bottom: var(--spacing-md);
+    color: var(--color-primary);
     font-weight: 600;
 }
 
-#trip-summary {
-    background: #f9f9f9;
-    border-radius: 4px;
-    padding: 0.75rem;
-    font-size: 0.85rem;
-    max-height: 140px;
-    overflow-y: auto;
-    overflow-x: hidden;
-}
+/* =============================================================================
+   LEGEND
+   ============================================================================= */
 
 .legend-container {
-    padding: 0.5rem 0;
+    padding: var(--spacing-sm) 0;
 }
 
 .legend-item {
     display: flex;
     align-items: center;
-    margin-bottom: 0.5rem;
-    font-size: 0.85rem;
+    margin-bottom: var(--spacing-sm);
+    font-size: var(--font-size-sm);
 }
 
 .legend-item:last-child {
@@ -274,38 +360,42 @@ header h1 {
 .legend-line {
     width: 30px;
     height: 3px;
-    margin-right: 0.5rem;
+    margin-right: var(--spacing-sm);
     border-radius: 2px;
     flex-shrink: 0;
 }
 
 .legend-line.direct {
-    background: #4CAF50;
+    background: var(--color-success);
 }
 
 .legend-line.connecting {
-    background: #FF9800;
+    background: var(--color-warning);
 }
 
 .legend-line.selected {
-    background: #667eea;
+    background: var(--color-primary);
     height: 4px;
 }
 
+/* =============================================================================
+   SIDEBAR (Flight Options)
+   ============================================================================= */
+
 .sidebar {
-    width: 380px;
-    background: white;
-    border-left: 1px solid #e0e0e0;
+    width: var(--sidebar-width);
+    background: var(--color-bg-white);
+    border-left: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
     position: absolute;
     right: 0;
     top: 0;
-    bottom: 200px; /* Leave space for bottom panel */
+    bottom: var(--bottom-panel-height);
     transform: translateX(100%);
-    transition: transform 0.3s ease;
+    transition: transform var(--transition-normal);
     flex-shrink: 0;
-    z-index: 1001; /* Above bottom panel */
+    z-index: 1001;
     box-shadow: -2px 0 10px rgba(0,0,0,0.1);
 }
 
@@ -314,8 +404,8 @@ header h1 {
 }
 
 .sidebar-header {
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid #e0e0e0;
+    padding: var(--spacing-lg) 1.25rem;
+    border-bottom: 1px solid var(--color-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -323,8 +413,8 @@ header h1 {
 }
 
 .sidebar-header h3 {
-    font-size: 1rem;
-    color: #667eea;
+    font-size: var(--font-size-md);
+    color: var(--color-primary);
     font-weight: 600;
 }
 
@@ -332,7 +422,7 @@ header h1 {
     background: none;
     border: none;
     font-size: 1.5rem;
-    color: #999;
+    color: var(--color-text-muted);
     cursor: pointer;
     padding: 0;
     width: 30px;
@@ -340,8 +430,8 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    transition: background 0.2s;
+    border-radius: var(--border-radius-round);
+    transition: background var(--transition-fast);
 }
 
 .close-btn:hover {
@@ -351,28 +441,32 @@ header h1 {
 .sidebar-content {
     flex: 1;
     overflow-y: auto;
-    padding: 0.75rem;
+    padding: var(--spacing-md);
     min-height: 0;
 }
 
+/* =============================================================================
+   FLIGHT ITEMS
+   ============================================================================= */
+
 .flight-item {
-    padding: 0.85rem;
+    padding: var(--spacing-sm) var(--spacing-md);
     margin-bottom: 0.6rem;
-    border: 2px solid #e0e0e0;
-    border-radius: 6px;
+    border: 2px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
     cursor: pointer;
-    transition: all 0.2s;
-    background: white;
+    transition: all var(--transition-fast);
+    background: var(--color-bg-white);
 }
 
 .flight-item:hover {
-    border-color: #667eea;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-lg);
     transform: translateY(-2px);
 }
 
 .flight-item.selected {
-    border-color: #667eea;
+    border-color: var(--color-primary);
     background: #f0f4ff;
 }
 
@@ -380,45 +474,45 @@ header h1 {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--spacing-sm);
 }
 
 .flight-route {
     font-weight: 600;
-    font-size: 1rem;
+    font-size: var(--font-size-md);
 }
 
 .flight-date {
-    font-size: 0.85rem;
-    color: #666;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
 }
 
 .flight-badge {
     display: inline-block;
-    padding: 0.25rem 0.5rem;
+    padding: var(--spacing-xs) var(--spacing-sm);
     border-radius: 12px;
-    font-size: 0.75rem;
+    font-size: var(--font-size-xs);
     font-weight: 500;
-    margin-right: 0.5rem;
+    margin-right: var(--spacing-sm);
 }
 
 .badge-direct {
-    background: #4CAF50;
+    background: var(--color-success);
     color: white;
 }
 
 .badge-stops {
-    background: #FF9800;
+    background: var(--color-warning);
     color: white;
 }
 
 .badge-premium-economy {
-    background: #4CAF50;
+    background: var(--color-success);
     color: white;
 }
 
 .badge-business {
-    background: #667eea;
+    background: var(--color-primary);
     color: white;
 }
 
@@ -428,10 +522,14 @@ header h1 {
 }
 
 .flight-details {
-    font-size: 0.85rem;
-    color: #666;
-    margin-top: 0.5rem;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+    margin-top: var(--spacing-sm);
 }
+
+/* =============================================================================
+   MODAL
+   ============================================================================= */
 
 .modal {
     display: none;
@@ -442,7 +540,7 @@ header h1 {
     width: 100%;
     height: 100%;
     background-color: rgba(0,0,0,0.5);
-    animation: fadeIn 0.2s;
+    animation: fadeIn var(--transition-fast);
 }
 
 .modal.show {
@@ -452,14 +550,14 @@ header h1 {
 }
 
 .modal-content {
-    background: white;
+    background: var(--color-bg-white);
     padding: 2rem;
     border-radius: 8px;
     max-width: 600px;
     max-height: 80vh;
     overflow-y: auto;
     position: relative;
-    animation: slideUp 0.3s;
+    animation: slideUp var(--transition-normal);
 }
 
 @keyframes fadeIn {
@@ -480,45 +578,48 @@ header h1 {
 
 .close-modal {
     position: absolute;
-    right: 1rem;
-    top: 1rem;
+    right: var(--spacing-lg);
+    top: var(--spacing-lg);
     font-size: 2rem;
-    color: #999;
+    color: var(--color-text-muted);
     cursor: pointer;
     line-height: 1;
 }
 
 .close-modal:hover {
-    color: #333;
+    color: var(--color-text);
 }
 
+/* =============================================================================
+   VALIDATION
+   ============================================================================= */
+
 .validation-result {
-    margin-top: 1rem;
+    margin-top: var(--spacing-lg);
 }
 
 .validation-valid {
-    color: #4CAF50;
+    color: var(--color-success);
     font-weight: 600;
 }
 
 .validation-error {
-    color: #f44336;
-    margin-top: 0.5rem;
+    color: var(--color-error);
+    margin-top: var(--spacing-sm);
 }
 
 .validation-warning {
-    color: #FF9800;
-    margin-top: 0.5rem;
+    color: var(--color-warning);
+    margin-top: var(--spacing-sm);
 }
 
 .validation-summary {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid #e0e0e0;
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-xl);
+    border-top: 1px solid var(--color-border);
 }
 
 .validation-summary-item {
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--spacing-sm);
     font-size: 0.9rem;
 }
-

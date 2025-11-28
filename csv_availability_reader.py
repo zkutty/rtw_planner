@@ -1,26 +1,49 @@
 """
 CSV-based availability reader for Seats.aero data
+Optimized with indexing for fast lookups
 """
 import csv
 import os
 from datetime import datetime
-from typing import List, Dict, Optional
-from pathlib import Path
+from typing import List, Dict, Optional, Set
+from functools import lru_cache
 
 
 class CSVAvailabilityReader:
-    """Read availability data from CSV files"""
+    """Read availability data from CSV files with optimized indexing"""
+    
+    # Column name variations (cached at class level)
+    ORIGIN_COLS = ['Origin Airport', 'origin airport', 'ORIGIN AIRPORT', 
+                   'origin', 'Origin', 'ORIGIN', 'from', 'From', 'FROM', 
+                   'departure', 'Departure', 'DEPARTURE', 'dep', 'Dep', 'DEP']
+    DEST_COLS = ['Destination Airport', 'destination airport', 'DESTINATION AIRPORT',
+                 'destination', 'Destination', 'DESTINATION', 'to', 'To', 'TO',
+                 'arrival', 'Arrival', 'ARRIVAL', 'arr', 'Arr', 'ARR']
+    DATE_COLS = ['Date', 'date', 'DATE', 'departure_date', 'Departure_Date',
+                 'flight_date', 'Flight_Date', 'dep_date', 'Dep_Date']
     
     def __init__(self, csv_file_path: str):
         """
-        Initialize the CSV reader
+        Initialize the CSV reader with indexing
         
         Args:
             csv_file_path: Path to the CSV file containing availability data
         """
         self.csv_file_path = csv_file_path
         self.data = []
+        
+        # Pre-built indexes for fast lookup
+        self._index_by_origin: Dict[str, List[dict]] = {}
+        self._index_by_destination: Dict[str, List[dict]] = {}
+        self._index_by_route: Dict[str, List[dict]] = {}
+        
+        # Detected column names (cached after first detection)
+        self._origin_col: Optional[str] = None
+        self._dest_col: Optional[str] = None
+        self._date_col: Optional[str] = None
+        
         self._load_csv()
+        self._build_indexes()
     
     def _load_csv(self):
         """Load and parse the CSV file"""
@@ -28,7 +51,7 @@ class CSVAvailabilityReader:
             raise FileNotFoundError(f"CSV file not found: {self.csv_file_path}")
         
         with open(self.csv_file_path, 'r', encoding='utf-8') as f:
-            # Try to detect delimiter
+            # Detect delimiter
             sample = f.read(1024)
             f.seek(0)
             sniffer = csv.Sniffer()
@@ -38,10 +61,90 @@ class CSVAvailabilityReader:
             self.data = list(reader)
         
         if not self.data:
-            raise ValueError(f"CSV file is empty or has no data rows: {self.csv_file_path}")
+            raise ValueError(f"CSV file is empty: {self.csv_file_path}")
+        
+        # Detect column names once
+        first_row = self.data[0]
+        for col in self.ORIGIN_COLS:
+            if col in first_row:
+                self._origin_col = col
+                break
+        for col in self.DEST_COLS:
+            if col in first_row:
+                self._dest_col = col
+                break
+        for col in self.DATE_COLS:
+            if col in first_row:
+                self._date_col = col
+                break
         
         print(f"Loaded {len(self.data)} rows from {self.csv_file_path}")
-        print(f"Columns: {list(self.data[0].keys())}")
+    
+    def _build_indexes(self):
+        """Build indexes for O(1) lookup by origin and destination"""
+        for row in self.data:
+            origin = self._get_origin(row)
+            dest = self._get_destination(row)
+            
+            if origin:
+                if origin not in self._index_by_origin:
+                    self._index_by_origin[origin] = []
+                self._index_by_origin[origin].append(row)
+            
+            if dest:
+                if dest not in self._index_by_destination:
+                    self._index_by_destination[dest] = []
+                self._index_by_destination[dest].append(row)
+            
+            if origin and dest:
+                route_key = f"{origin}-{dest}"
+                if route_key not in self._index_by_route:
+                    self._index_by_route[route_key] = []
+                self._index_by_route[route_key].append(row)
+        
+        print(f"Built indexes: {len(self._index_by_origin)} origins, {len(self._index_by_destination)} destinations")
+    
+    def _get_origin(self, row: dict) -> Optional[str]:
+        """Get origin from row using cached column name"""
+        if self._origin_col and self._origin_col in row:
+            val = row[self._origin_col]
+            return str(val).upper().strip() if val else None
+        return None
+    
+    def _get_destination(self, row: dict) -> Optional[str]:
+        """Get destination from row using cached column name"""
+        if self._dest_col and self._dest_col in row:
+            val = row[self._dest_col]
+            return str(val).upper().strip() if val else None
+        return None
+    
+    def _get_date(self, row: dict) -> Optional[str]:
+        """Get date from row using cached column name"""
+        if self._date_col and self._date_col in row:
+            val = row[self._date_col]
+            return str(val).strip() if val else None
+        return None
+    
+    def get_rows_by_origin(self, origin: str) -> List[dict]:
+        """Get all rows for a given origin airport - O(1) lookup"""
+        return self._index_by_origin.get(origin.upper().strip(), [])
+    
+    def get_rows_by_destination(self, destination: str) -> List[dict]:
+        """Get all rows for a given destination airport - O(1) lookup"""
+        return self._index_by_destination.get(destination.upper().strip(), [])
+    
+    def get_rows_by_route(self, origin: str, destination: str) -> List[dict]:
+        """Get all rows for a given route - O(1) lookup"""
+        route_key = f"{origin.upper().strip()}-{destination.upper().strip()}"
+        return self._index_by_route.get(route_key, [])
+    
+    def get_all_origins(self) -> Set[str]:
+        """Get all unique origin airports"""
+        return set(self._index_by_origin.keys())
+    
+    def get_all_destinations(self) -> Set[str]:
+        """Get all unique destination airports"""
+        return set(self._index_by_destination.keys())
     
     def search_availability(
         self,
@@ -52,123 +155,55 @@ class CSVAvailabilityReader:
         alliance: Optional[str] = None
     ) -> Dict:
         """
-        Search for availability matching the route
-        
-        Args:
-            origin: Origin airport code (e.g., "SYD")
-            destination: Destination airport code (e.g., "LAX")
-            date: Date in YYYY-MM-DD format
-            airline: Optional airline code filter
-            alliance: Optional alliance filter
-            
-        Returns:
-            Dictionary with availability data
+        Search for availability matching the route - OPTIMIZED with indexing
         """
-        # Normalize inputs
         origin = origin.upper().strip()
         destination = destination.upper().strip()
         
-        # Try to parse and normalize the date
+        # Parse search date
+        search_date = None
         try:
             search_date = datetime.strptime(date, "%Y-%m-%d")
         except ValueError:
-            # Try other date formats
             for fmt in ["%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"]:
                 try:
                     search_date = datetime.strptime(date, fmt)
                     break
                 except ValueError:
                     continue
-            else:
-                search_date = None
         
+        # Use index for O(1) lookup instead of scanning all data
+        rows = self.get_rows_by_route(origin, destination)
         matches = []
         
-        for row in self.data:
-            # Try to match origin and destination
-            # Check common column name variations
-            row_origin = None
-            row_dest = None
-            row_date = None
-            
-            # Common column name variations
-            origin_cols = ['origin airport', 'Origin Airport', 'ORIGIN AIRPORT', 
-                          'origin', 'Origin', 'ORIGIN', 'from', 'From', 'FROM', 
-                          'departure', 'Departure', 'DEPARTURE', 'dep', 'Dep', 'DEP']
-            dest_cols = ['destination airport', 'Destination Airport', 'DESTINATION AIRPORT',
-                        'destination', 'Destination', 'DESTINATION', 'to', 'To', 'TO',
-                        'arrival', 'Arrival', 'ARRIVAL', 'arr', 'Arr', 'ARR']
-            date_cols = ['date', 'Date', 'DATE', 'departure_date', 'Departure_Date',
-                        'flight_date', 'Flight_Date', 'dep_date', 'Dep_Date']
-            
-            # Find origin column
-            for col in origin_cols:
-                if col in row:
-                    row_origin = str(row[col]).upper().strip()
-                    break
-            
-            # Find destination column
-            for col in dest_cols:
-                if col in row:
-                    row_dest = str(row[col]).upper().strip()
-                    break
-            
-            # Find date column
-            for col in date_cols:
-                if col in row:
-                    row_date = str(row[col]).strip()
-                    break
-            
-            # Match origin and destination
-            if row_origin == origin and row_dest == destination:
-                # If we have a date, try to match it (with some flexibility)
-                date_match = True
-                if search_date and row_date:
+        for row in rows:
+            # Date filtering
+            date_match = True
+            if search_date:
+                row_date = self._get_date(row)
+                if row_date:
                     try:
-                        # Try various date formats
-                        row_date_obj = None
-                        for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S"]:
-                            try:
-                                row_date_obj = datetime.strptime(row_date.split()[0], fmt)
-                                break
-                            except (ValueError, IndexError):
-                                continue
-                        
-                        if row_date_obj:
-                            # Allow matches within a few days (flexible date matching)
-                            date_diff = abs((search_date - row_date_obj).days)
-                            date_match = date_diff <= 3  # Allow 3 days flexibility
+                        row_date_obj = datetime.strptime(row_date.split()[0], "%Y-%m-%d")
+                        date_diff = abs((search_date - row_date_obj).days)
+                        date_match = date_diff <= 3
                     except:
-                        date_match = True  # If date parsing fails, include the match
-                
-                if date_match:
-                    # Apply airline filter if specified
-                    if airline:
-                        airline_cols = ['economy carriers', 'Economy Carriers', 'ECONOMY CARRIERS',
-                                       'business carriers', 'Business Carriers', 'BUSINESS CARRIERS',
-                                       'first carriers', 'First Carriers', 'FIRST CARRIERS',
-                                       'premium economy carriers', 'Premium Economy Carriers',
-                                       'airline', 'Airline', 'AIRLINE', 'carrier', 'Carrier', 'CARRIER']
-                        row_airline = None
-                        for col in airline_cols:
-                            if col in row:
-                                row_airline = str(row[col]).upper().strip()
-                                break
-                        if row_airline and airline.upper() not in row_airline:
-                            continue
-                    
-                    # Apply alliance filter if specified
-                    if alliance:
-                        alliance_cols = ['alliance', 'Alliance', 'ALLIANCE']
-                        row_alliance = None
-                        for col in alliance_cols:
-                            if col in row:
-                                row_alliance = str(row[col]).upper().strip()
-                                break
-                        if row_alliance and alliance.lower() not in row_alliance.lower():
-                            continue
-                    
-                    matches.append(row)
+                        pass
+            
+            if not date_match:
+                continue
+            
+            # Airline filter
+            if airline:
+                airline_upper = airline.upper()
+                row_airlines = (
+                    str(row.get('Business Carriers', '') or '') +
+                    str(row.get('Economy Carriers', '') or '') +
+                    str(row.get('Premium Economy Carriers', '') or '')
+                ).upper()
+                if airline_upper not in row_airlines:
+                    continue
+            
+            matches.append(row)
         
         return {
             "origin": origin,
@@ -184,17 +219,7 @@ class CSVAvailabilityReader:
         airline: Optional[str] = None,
         alliance: Optional[str] = None
     ) -> Dict:
-        """
-        Search for availability across multiple routes
-        
-        Args:
-            routes: List of route dictionaries with 'origin', 'destination', and 'date' keys
-            airline: Optional airline code filter
-            alliance: Optional alliance filter
-            
-        Returns:
-            Dictionary with availability data for all routes
-        """
+        """Search for availability across multiple routes"""
         results = {}
         
         for route in routes:
@@ -222,46 +247,25 @@ class CSVAvailabilityReader:
 
 
 class CSVSeatsAeroClient:
-    """Wrapper to make CSVAvailabilityReader compatible with SeatsAeroClient interface"""
+    """Wrapper for SeatsAeroClient interface compatibility"""
     
     def __init__(self, csv_file_path: str):
-        """
-        Initialize the CSV-based client
-        
-        Args:
-            csv_file_path: Path to the CSV file containing availability data
-        """
         self.reader = CSVAvailabilityReader(csv_file_path)
     
-    def search_availability(
-        self,
-        origin: str,
-        destination: str,
-        date: str,
-        airline: Optional[str] = None,
-        alliance: Optional[str] = None
-    ) -> Dict:
-        """Search for availability (compatible with SeatsAeroClient interface)"""
+    def search_availability(self, origin: str, destination: str, date: str,
+                           airline: Optional[str] = None, alliance: Optional[str] = None) -> Dict:
         return self.reader.search_availability(origin, destination, date, airline, alliance)
     
-    def bulk_availability(
-        self,
-        routes: List[Dict[str, str]],
-        airline: Optional[str] = None,
-        alliance: Optional[str] = None
-    ) -> Dict:
-        """Bulk search for availability (compatible with SeatsAeroClient interface)"""
+    def bulk_availability(self, routes: List[Dict[str, str]],
+                         airline: Optional[str] = None, alliance: Optional[str] = None) -> Dict:
         return self.reader.bulk_availability(routes, airline, alliance)
 
 
 if __name__ == "__main__":
-    # Example usage
     import sys
     
     if len(sys.argv) < 2:
         print("Usage: python csv_availability_reader.py <csv_file_path>")
-        print("\nExample:")
-        print("  python csv_availability_reader.py availability_data.csv")
         sys.exit(1)
     
     csv_path = sys.argv[1]
@@ -269,7 +273,6 @@ if __name__ == "__main__":
     try:
         reader = CSVAvailabilityReader(csv_path)
         
-        # Example search
         print("\n" + "="*60)
         print("Example: Searching for SYD -> LAX on 2026-03-15")
         print("="*60)
@@ -290,4 +293,3 @@ if __name__ == "__main__":
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
-
