@@ -317,6 +317,13 @@ def status():
     })
 
 
+@app.route('/health')
+@app.route('/healthz')
+def health():
+    """Simple health check for Render/load balancers"""
+    return jsonify({'status': 'ok'}), 200
+
+
 @app.route('/suggestions')
 def suggestions():
     """Serve the trip suggestions page"""
