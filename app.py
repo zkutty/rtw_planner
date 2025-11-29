@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Flask web application for interactive RTW trip planning
-Memory-optimized version using SQLite (~50MB RAM instead of ~500MB)
+Supports both Seats.aero Partner API (live) and SQLite database (offline)
 """
 from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
@@ -12,60 +12,78 @@ app = Flask(__name__)
 CORS(app)
 
 # Global state
-db_reader = None
+data_source = None  # Can be SeatsAeroPartnerAPI or DatabaseReader
 planner_coords = None  # Just for coordinates/names, not flight data
 _init_error = None
+_using_api = False
 
 
 def init_app():
-    """Initialize the application with SQLite database"""
-    global db_reader, planner_coords, _init_error
+    """Initialize the application with Seats.aero API or SQLite database fallback"""
+    global data_source, planner_coords, _init_error, _using_api
     
-    # Try to load SQLite database first (memory efficient)
-    db_file = os.environ.get('DB_FILE', 'flights.db')
+    # Check for Seats.aero API key first (preferred method)
+    api_key = os.environ.get('SEATS_AERO_API_KEY')
     
-    if os.path.exists(db_file):
+    if api_key:
         try:
-            from db_reader import DatabaseReader
-            db_reader = DatabaseReader(db_file)
-            print(f"✓ Using SQLite database: {db_file}")
+            from seats_aero_partner_api import SeatsAeroPartnerAPI
+            data_source = SeatsAeroPartnerAPI(api_key)
+            _using_api = True
+            print(f"✓ Using Seats.aero Partner API (live data)")
         except Exception as e:
-            _init_error = f"Failed to load database: {e}"
-            print(f"❌ {_init_error}")
-            return False
-    else:
-        # Try to build database from CSV
-        csv_candidates = [
-            os.environ.get('CSV_FILE', ''),
-            'flights.csv',
-            'seats.aero qantas Export.csv',
-        ]
+            print(f"⚠ Failed to initialize API client: {e}")
+            print("  Falling back to SQLite database...")
+            api_key = None  # Fall through to database loading
+    
+    # Fall back to SQLite database if no API key or API init failed
+    if not api_key:
+        db_file = os.environ.get('DB_FILE', 'flights.db')
         
-        csv_file = None
-        for candidate in csv_candidates:
-            if candidate and os.path.exists(candidate):
-                csv_file = candidate
-                break
-        
-        if csv_file:
-            print(f"Building database from {csv_file}...")
+        if os.path.exists(db_file):
             try:
-                from build_database import build_database
-                if build_database(csv_file, db_file):
-                    from db_reader import DatabaseReader
-                    db_reader = DatabaseReader(db_file)
-                    print(f"✓ Database built and loaded")
-                else:
-                    _init_error = "Failed to build database from CSV"
-                    return False
+                from db_reader import DatabaseReader
+                data_source = DatabaseReader(db_file)
+                _using_api = False
+                print(f"✓ Using SQLite database: {db_file}")
             except Exception as e:
-                _init_error = f"Failed to build database: {e}"
+                _init_error = f"Failed to load database: {e}"
                 print(f"❌ {_init_error}")
                 return False
         else:
-            _init_error = "No database or CSV file found. Upload flights.db or flights.csv"
-            print(f"❌ {_init_error}")
-            return False
+            # Try to build database from CSV
+            csv_candidates = [
+                os.environ.get('CSV_FILE', ''),
+                'flights.csv',
+                'seats.aero qantas Export.csv',
+            ]
+            
+            csv_file = None
+            for candidate in csv_candidates:
+                if candidate and os.path.exists(candidate):
+                    csv_file = candidate
+                    break
+            
+            if csv_file:
+                print(f"Building database from {csv_file}...")
+                try:
+                    from build_database import build_database
+                    if build_database(csv_file, db_file):
+                        from db_reader import DatabaseReader
+                        data_source = DatabaseReader(db_file)
+                        _using_api = False
+                        print(f"✓ Database built and loaded")
+                    else:
+                        _init_error = "Failed to build database from CSV"
+                        return False
+                except Exception as e:
+                    _init_error = f"Failed to build database: {e}"
+                    print(f"❌ {_init_error}")
+                    return False
+            else:
+                _init_error = "No API key or database found. Set SEATS_AERO_API_KEY or provide flights.db"
+                print(f"❌ {_init_error}")
+                return False
     
     # Load just coordinates/names (small memory footprint)
     try:
@@ -181,17 +199,18 @@ def health():
 @app.route('/api/status')
 def status():
     return jsonify({
-        'status': 'ok' if db_reader else 'error',
-        'initialized': db_reader is not None,
+        'status': 'ok' if data_source else 'error',
+        'initialized': data_source is not None,
         'error': _init_error,
-        'using_sqlite': db_reader is not None
+        'using_api': _using_api,
+        'data_source': 'seats.aero API' if _using_api else 'SQLite database'
     })
 
 
 @app.route('/api/flights', methods=['GET'])
 def get_flights():
     """Get available flights from an airport"""
-    if not db_reader:
+    if not data_source:
         return jsonify({'error': 'Not initialized'}), 500
     
     origin = request.args.get('origin', '').upper()
@@ -203,11 +222,11 @@ def get_flights():
         return jsonify({'error': 'Origin and date required'}), 400
     
     try:
-        flights = db_reader.get_flights_from_origin(origin, target_date, date_range)
+        flights = data_source.get_flights_from_origin(origin, target_date, date_range)
         flights = filter_by_cabin_class(flights, cabin_class)
         formatted = [format_flight(f) for f in flights]
         
-        return jsonify({'flights': formatted, 'count': len(formatted)})
+        return jsonify({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -215,7 +234,7 @@ def get_flights():
 @app.route('/api/flights-to', methods=['GET'])
 def get_flights_to():
     """Get available flights TO an airport"""
-    if not db_reader:
+    if not data_source:
         return jsonify({'error': 'Not initialized'}), 500
     
     destination = request.args.get('destination', '').upper()
@@ -227,11 +246,11 @@ def get_flights_to():
         return jsonify({'error': 'Destination and date required'}), 400
     
     try:
-        flights = db_reader.get_flights_to_destination(destination, target_date, date_range)
+        flights = data_source.get_flights_to_destination(destination, target_date, date_range)
         flights = filter_by_cabin_class(flights, cabin_class)
         formatted = [format_flight(f) for f in flights]
         
-        return jsonify({'flights': formatted, 'count': len(formatted)})
+        return jsonify({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -282,11 +301,11 @@ def get_airport_coords():
 @app.route('/api/all-airports', methods=['GET'])
 def get_all_airports():
     """Get all unique airports"""
-    if not db_reader:
+    if not data_source:
         return jsonify({'error': 'Not initialized'}), 500
     
     try:
-        all_airports = db_reader.get_all_airports()
+        all_airports = data_source.get_all_airports()
         return jsonify({
             'total_airports': len(all_airports),
             'airports': sorted(list(all_airports))
@@ -330,7 +349,7 @@ def get_airport_names():
 @app.route('/api/airport-has-flights', methods=['GET'])
 def airport_has_flights():
     """Check if an airport has flights"""
-    if not db_reader:
+    if not data_source:
         return jsonify({'error': 'Not initialized'}), 500
     
     airport = request.args.get('airport', '').upper()
@@ -340,7 +359,7 @@ def airport_has_flights():
         return jsonify({'error': 'Airport and start_date required'}), 400
     
     try:
-        has_flights = db_reader.airport_has_flights(airport, start_date)
+        has_flights = data_source.airport_has_flights(airport, start_date)
         return jsonify({'airport': airport, 'has_flights': has_flights})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
