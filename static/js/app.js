@@ -210,13 +210,15 @@ function initMap() {
     }).addTo(AppState.map);
 }
 
-async function zoomToAirport(airportCode, zoomLevel = 6) {
+async function zoomToAirport(airportCode, zoomLevel = 6, shouldZoom = true) {
     try {
         const coords = await getAirportCoords([airportCode]);
         
         if (coords[airportCode]?.lat !== 0) {
             const { lat, lon, name } = coords[airportCode];
-            AppState.map.flyTo([lat, lon], zoomLevel, { duration: 1.0 });
+            if (shouldZoom) {
+                AppState.map.flyTo([lat, lon], zoomLevel, { duration: 1.0 });
+            }
             
             // Clear existing origin markers
             AppState.flightMarkers = AppState.flightMarkers.filter(m => {
@@ -413,7 +415,7 @@ async function loadFlightsFromAirport(origin, date) {
         
         // Ensure map is visible
         AppState.map?.invalidateSize();
-        await zoomToAirport(origin, 6);
+        await zoomToAirport(origin, 6, false);
         
         // Get filter values
         const dateRange = document.getElementById('date-range').value;
