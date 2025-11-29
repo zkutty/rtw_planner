@@ -1284,8 +1284,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (airports.length > 0) await zoomToAirport(airports[0], 6);
     });
     
-    // Filter changes
-    ['date-range', 'cabin-filter'].forEach(id => {
+    // Filter changes - reload flights when any filter changes
+    ['date-range', 'cabin-filter', 'miles-program'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', () => {
             if (AppState.currentOrigin && AppState.currentDate) {
                 loadFlightsFromAirport(AppState.currentOrigin, AppState.currentDate);
