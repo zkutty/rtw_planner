@@ -174,14 +174,14 @@ class SeatsAeroPartnerAPI:
         Args:
             origin: Origin airport code
             target_date: Target date in YYYY-MM-DD format
-            date_range: Number of days before/after target date to search
+            date_range: Number of days forward from target date to search
             
         Returns:
             List of flight dictionaries in the app's expected format
         """
-        # Calculate date range
+        # Calculate date range - search forward from target date
         target = datetime.strptime(target_date, "%Y-%m-%d")
-        start_date = (target - timedelta(days=date_range)).strftime("%Y-%m-%d")
+        start_date = target_date  # Start from the target date
         end_date = (target + timedelta(days=date_range)).strftime("%Y-%m-%d")
         
         # Check cache
@@ -211,14 +211,14 @@ class SeatsAeroPartnerAPI:
         Args:
             destination: Destination airport code
             target_date: Target date in YYYY-MM-DD format
-            date_range: Number of days before/after target date to search
+            date_range: Number of days forward from target date to search
             
         Returns:
             List of flight dictionaries in the app's expected format
         """
-        # Calculate date range
+        # Calculate date range - search forward from target date
         target = datetime.strptime(target_date, "%Y-%m-%d")
-        start_date = (target - timedelta(days=date_range)).strftime("%Y-%m-%d")
+        start_date = target_date  # Start from the target date
         end_date = (target + timedelta(days=date_range)).strftime("%Y-%m-%d")
         
         # Check cache
