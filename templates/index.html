@@ -131,9 +131,15 @@
         </div>
         
         <!-- Bottom Panel - Trip Summary & Actions -->
-        <div class="bottom-panel">
+        <div class="bottom-panel" id="bottom-panel">
+            <!-- Expand/Collapse Toggle -->
+            <button class="expand-toggle" id="expand-toggle" title="Expand/Collapse">
+                <span class="expand-icon">▲</span>
+                <span class="expand-text">Expand Trip Summary</span>
+            </button>
+            
             <div class="bottom-panel-content">
-                <div class="bottom-panel-section">
+                <div class="bottom-panel-section summary-section">
                     <h3>Trip Summary</h3>
                     <div id="trip-summary">
                         <p class="empty-state">No segments selected yet</p>
@@ -188,7 +194,7 @@
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     
-    <!-- Mobile Menu Script -->
+    <!-- Mobile Menu & Expand Panel Script -->
     <script>
         // Mobile menu toggle
         const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
@@ -220,6 +226,31 @@
                 }
                 return originalLoadFlights.apply(this, args);
             };
+        }
+        
+        // Expand/Collapse bottom panel
+        const expandToggle = document.getElementById('expand-toggle');
+        const bottomPanel = document.getElementById('bottom-panel');
+        const expandText = expandToggle?.querySelector('.expand-text');
+        
+        if (expandToggle && bottomPanel) {
+            expandToggle.addEventListener('click', () => {
+                bottomPanel.classList.toggle('expanded');
+                
+                // Update button text
+                if (expandText) {
+                    expandText.textContent = bottomPanel.classList.contains('expanded') 
+                        ? 'Collapse Trip Summary' 
+                        : 'Expand Trip Summary';
+                }
+                
+                // Invalidate map size after animation
+                setTimeout(() => {
+                    if (window.AppState && window.AppState.map) {
+                        window.AppState.map.invalidateSize();
+                    }
+                }, 350);
+            });
         }
     </script>
 </body>
