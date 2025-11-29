@@ -3,13 +3,32 @@
 Flask web application for interactive RTW trip planning
 Supports both Seats.aero Partner API (live) and SQLite database (offline)
 """
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
+from functools import wraps
 import os
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24).hex())
 CORS(app)
+
+# Password protection
+SITE_PASSWORD = os.environ.get('SITE_PASSWORD', None)
+
+
+def password_required(f):
+    """Decorator to require password authentication"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Skip auth if no password is set
+        if not SITE_PASSWORD:
+            return f(*args, **kwargs)
+        # Check if authenticated
+        if not session.get('authenticated'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Global state
 data_source = None  # Can be SeatsAeroPartnerAPI or DatabaseReader
@@ -152,7 +171,134 @@ def filter_by_cabin_class(flights: list, cabin_class: str) -> list:
 # ROUTES
 # ============================================================================
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Password login page"""
+    if not SITE_PASSWORD:
+        return redirect(url_for('index'))
+    
+    if session.get('authenticated'):
+        return redirect(url_for('index'))
+    
+    error = None
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == SITE_PASSWORD:
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+        else:
+            error = 'Incorrect password'
+    
+    return f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>RTW Planner - Login</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            * {{ box-sizing: border-box; }}
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0;
+                padding: 20px;
+            }}
+            .login-container {{
+                background: rgba(255, 255, 255, 0.05);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 16px;
+                padding: 40px;
+                width: 100%;
+                max-width: 400px;
+                text-align: center;
+            }}
+            h1 {{
+                color: #fff;
+                margin: 0 0 10px 0;
+                font-size: 28px;
+            }}
+            .subtitle {{
+                color: rgba(255, 255, 255, 0.6);
+                margin-bottom: 30px;
+            }}
+            .error {{
+                background: rgba(239, 68, 68, 0.2);
+                border: 1px solid rgba(239, 68, 68, 0.5);
+                color: #fca5a5;
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+            }}
+            input[type="password"] {{
+                width: 100%;
+                padding: 14px 16px;
+                font-size: 16px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.1);
+                color: #fff;
+                margin-bottom: 16px;
+                outline: none;
+                transition: border-color 0.2s;
+            }}
+            input[type="password"]:focus {{
+                border-color: #667eea;
+            }}
+            input[type="password"]::placeholder {{
+                color: rgba(255, 255, 255, 0.4);
+            }}
+            button {{
+                width: 100%;
+                padding: 14px;
+                font-size: 16px;
+                font-weight: 600;
+                color: #fff;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: transform 0.2s, box-shadow 0.2s;
+            }}
+            button:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+            }}
+            .emoji {{
+                font-size: 48px;
+                margin-bottom: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="login-container">
+            <div class="emoji">🌍✈️</div>
+            <h1>RTW Trip Planner</h1>
+            <p class="subtitle">Enter password to continue</p>
+            {"<div class='error'>" + error + "</div>" if error else ""}
+            <form method="POST">
+                <input type="password" name="password" placeholder="Password" autofocus required>
+                <button type="submit">Enter</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    '''
+
+
+@app.route('/logout')
+def logout():
+    """Log out and clear session"""
+    session.clear()
+    return redirect(url_for('login'))
+
+
 @app.route('/')
+@password_required
 def index():
     """Serve the main page"""
     if _init_error:
@@ -186,6 +332,7 @@ def index():
 
 
 @app.route('/suggestions')
+@password_required
 def suggestions():
     return render_template('suggestions.html')
 
