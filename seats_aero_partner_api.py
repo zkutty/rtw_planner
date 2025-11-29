@@ -86,7 +86,8 @@ class SeatsAeroPartnerAPI:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         take: int = 500,
-        cursor: Optional[int] = None
+        cursor: Optional[int] = None,
+        source: Optional[str] = None
     ) -> Dict:
         """
         Get cached availability from the Partner API
@@ -98,11 +99,15 @@ class SeatsAeroPartnerAPI:
             end_date: End date in YYYY-MM-DD format
             take: Number of results to return (max 500)
             cursor: Pagination cursor for fetching more results
+            source: Miles program source (e.g., "qantas", "united")
             
         Returns:
             Availability data from the API
         """
         params = {"take": min(take, 500)}
+        
+        # Use provided source or fall back to instance default
+        params["source"] = source or self.source
         
         if origin_airport:
             params["origin_airport"] = origin_airport.upper()
@@ -123,7 +128,8 @@ class SeatsAeroPartnerAPI:
         destination_airport: Optional[str] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        max_results: int = 2000
+        max_results: int = 2000,
+        source: Optional[str] = None
     ) -> List[Dict]:
         """
         Get all availability records, handling pagination automatically
@@ -134,6 +140,7 @@ class SeatsAeroPartnerAPI:
             start_date: Start date in YYYY-MM-DD format
             end_date: End date in YYYY-MM-DD format
             max_results: Maximum number of results to return
+            source: Miles program source (e.g., "qantas", "united")
             
         Returns:
             List of all availability records
@@ -148,7 +155,8 @@ class SeatsAeroPartnerAPI:
                 start_date=start_date,
                 end_date=end_date,
                 take=500,
-                cursor=cursor
+                cursor=cursor,
+                source=source
             )
             
             data = response.get("data", [])
@@ -165,7 +173,8 @@ class SeatsAeroPartnerAPI:
         self,
         origin: str,
         target_date: str,
-        date_range: int = 2
+        date_range: int = 2,
+        source: Optional[str] = None
     ) -> List[Dict]:
         """
         Get flights from an origin airport within a date range
@@ -175,17 +184,21 @@ class SeatsAeroPartnerAPI:
             origin: Origin airport code
             target_date: Target date in YYYY-MM-DD format
             date_range: Number of days forward from target date to search
+            source: Miles program source (e.g., "qantas", "united")
             
         Returns:
             List of flight dictionaries in the app's expected format
         """
+        # Use provided source or fall back to instance default
+        effective_source = source or self.source
+        
         # Calculate date range - search forward from target date
         target = datetime.strptime(target_date, "%Y-%m-%d")
         start_date = target_date  # Start from the target date
         end_date = (target + timedelta(days=date_range)).strftime("%Y-%m-%d")
         
-        # Check cache
-        cache_key = self._get_cache_key("from", origin, start_date, end_date)
+        # Check cache (include source in cache key)
+        cache_key = self._get_cache_key("from", origin, start_date, end_date, effective_source)
         if self._is_cache_valid(cache_key):
             availability = self._cache[cache_key]
         else:
@@ -193,7 +206,8 @@ class SeatsAeroPartnerAPI:
                 origin_airport=origin,
                 start_date=start_date,
                 end_date=end_date,
-                max_results=1000
+                max_results=1000,
+                source=effective_source
             )
             self._set_cache(cache_key, availability)
         
@@ -203,7 +217,8 @@ class SeatsAeroPartnerAPI:
         self,
         destination: str,
         target_date: str,
-        date_range: int = 2
+        date_range: int = 2,
+        source: Optional[str] = None
     ) -> List[Dict]:
         """
         Get flights to a destination airport within a date range
@@ -212,17 +227,21 @@ class SeatsAeroPartnerAPI:
             destination: Destination airport code
             target_date: Target date in YYYY-MM-DD format
             date_range: Number of days forward from target date to search
+            source: Miles program source (e.g., "qantas", "united")
             
         Returns:
             List of flight dictionaries in the app's expected format
         """
+        # Use provided source or fall back to instance default
+        effective_source = source or self.source
+        
         # Calculate date range - search forward from target date
         target = datetime.strptime(target_date, "%Y-%m-%d")
         start_date = target_date  # Start from the target date
         end_date = (target + timedelta(days=date_range)).strftime("%Y-%m-%d")
         
-        # Check cache
-        cache_key = self._get_cache_key("to", destination, start_date, end_date)
+        # Check cache (include source in cache key)
+        cache_key = self._get_cache_key("to", destination, start_date, end_date, effective_source)
         if self._is_cache_valid(cache_key):
             availability = self._cache[cache_key]
         else:
@@ -230,7 +249,8 @@ class SeatsAeroPartnerAPI:
                 destination_airport=destination,
                 start_date=start_date,
                 end_date=end_date,
-                max_results=1000
+                max_results=1000,
+                source=effective_source
             )
             self._set_cache(cache_key, availability)
         

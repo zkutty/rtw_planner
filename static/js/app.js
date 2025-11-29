@@ -409,6 +409,14 @@ async function loadFlightsFromAirport(origin, date) {
         loadBtn.textContent = 'Loading...';
     }
     
+    // Show loading overlay
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const loadingText = loadingOverlay?.querySelector('.loading-text');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'flex';
+        if (loadingText) loadingText.textContent = `Loading flights from ${origin}...`;
+    }
+    
     try {
         AppState.currentOrigin = origin;
         AppState.currentDate = date;
@@ -421,6 +429,7 @@ async function loadFlightsFromAirport(origin, date) {
         const dateRange = document.getElementById('date-range').value;
         const cabinFilter = document.getElementById('cabin-filter').value;
         const direction = document.getElementById('planning-direction')?.value || 'forward';
+        const milesProgram = document.getElementById('miles-program')?.value || 'qantas';
         
         // Update global state
         AppState.planningDirection = direction;
@@ -451,8 +460,8 @@ async function loadFlightsFromAirport(origin, date) {
         // Fetch flights
         const endpoint = direction === 'backward' ? '/api/flights-to' : '/api/flights';
         const params = direction === 'backward' 
-            ? `destination=${origin}&date=${searchDate}&date_range=${maxSearchRange}&cabin_class=${cabinFilter || ''}`
-            : `origin=${origin}&date=${searchDate}&date_range=${maxSearchRange}&cabin_class=${cabinFilter || ''}`;
+            ? `destination=${origin}&date=${searchDate}&date_range=${maxSearchRange}&cabin_class=${cabinFilter || ''}&source=${milesProgram}`
+            : `origin=${origin}&date=${searchDate}&date_range=${maxSearchRange}&cabin_class=${cabinFilter || ''}&source=${milesProgram}`;
         
         const response = await fetch(`${endpoint}?${params}`, {
             signal: AppState.currentLoadAbortController.signal
@@ -549,6 +558,12 @@ async function loadFlightsFromAirport(origin, date) {
             showError('Failed to load flights');
         }
     } finally {
+        // Hide loading overlay
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+        }
+        
         if (loadBtn) {
             loadBtn.disabled = false;
             loadBtn.textContent = 'Load Flights';

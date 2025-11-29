@@ -364,16 +364,22 @@ def get_flights():
     target_date = request.args.get('date', '')
     date_range = int(request.args.get('date_range', 2))
     cabin_class = request.args.get('cabin_class', None)
+    miles_program = request.args.get('source', 'qantas')  # Miles program source
     
     if not origin or not target_date:
         return jsonify({'error': 'Origin and date required'}), 400
     
     try:
-        flights = data_source.get_flights_from_origin(origin, target_date, date_range)
+        # Pass source to API if using the API, otherwise ignore for database
+        if _using_api:
+            flights = data_source.get_flights_from_origin(origin, target_date, date_range, source=miles_program)
+        else:
+            flights = data_source.get_flights_from_origin(origin, target_date, date_range)
+        
         flights = filter_by_cabin_class(flights, cabin_class)
         formatted = [format_flight(f) for f in flights]
         
-        return jsonify({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database'})
+        return jsonify({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database', 'program': miles_program})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -388,16 +394,22 @@ def get_flights_to():
     target_date = request.args.get('date', '')
     date_range = int(request.args.get('date_range', 2))
     cabin_class = request.args.get('cabin_class', None)
+    miles_program = request.args.get('source', 'qantas')  # Miles program source
     
     if not destination or not target_date:
         return jsonify({'error': 'Destination and date required'}), 400
     
     try:
-        flights = data_source.get_flights_to_destination(destination, target_date, date_range)
+        # Pass source to API if using the API, otherwise ignore for database
+        if _using_api:
+            flights = data_source.get_flights_to_destination(destination, target_date, date_range, source=miles_program)
+        else:
+            flights = data_source.get_flights_to_destination(destination, target_date, date_range)
+        
         flights = filter_by_cabin_class(flights, cabin_class)
         formatted = [format_flight(f) for f in flights]
         
-        return jsonify({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database'})
+        return jsonify({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database', 'program': miles_program})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

@@ -62,6 +62,24 @@
                 <div class="panel-section">
                     <h3>Filters</h3>
                     <div class="input-group">
+                        <label>Miles Program:</label>
+                        <select id="miles-program">
+                            <option value="qantas" selected>Qantas</option>
+                            <option value="american">American Airlines</option>
+                            <option value="united">United</option>
+                            <option value="delta">Delta</option>
+                            <option value="aeroplan">Air Canada Aeroplan</option>
+                            <option value="alaska">Alaska Airlines</option>
+                            <option value="emirates">Emirates</option>
+                            <option value="singapore">Singapore Airlines</option>
+                            <option value="cathay">Cathay Pacific</option>
+                            <option value="velocity">Virgin Australia</option>
+                            <option value="flyingblue">Flying Blue (AF/KLM)</option>
+                            <option value="lifemiles">LifeMiles (Avianca)</option>
+                            <option value="eurobonus">SAS EuroBonus</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
                         <label>Date Range:</label>
                         <select id="date-range">
                             <option value="1" selected>±1 day</option>
@@ -126,6 +144,16 @@
 
             <!-- Map Container -->
             <div class="map-container">
+                <!-- Loading Overlay -->
+                <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                    <div class="loading-content">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">Loading flights...</div>
+                        <div class="loading-bar">
+                            <div class="loading-bar-progress"></div>
+                        </div>
+                    </div>
+                </div>
                 <div id="map"></div>
             </div>
         </div>

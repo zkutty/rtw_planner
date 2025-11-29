@@ -201,3 +201,4 @@ class DatabaseReader:
         """Get all unique airports (origins + destinations)"""
         return self.get_all_origins() | self.get_all_destinations()
 
+
