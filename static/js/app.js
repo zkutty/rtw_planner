@@ -463,9 +463,17 @@ async function loadFlightsFromAirport(origin, date) {
         
         // Fetch flights
         const endpoint = direction === 'backward' ? '/api/flights-to' : '/api/flights';
-        const params = direction === 'backward' 
+        const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
+        
+        // Build params - include end_date for connectivity filtering (only show destinations with onward flights)
+        let params = direction === 'backward' 
             ? `destination=${origin}&date=${searchDate}&date_range=${maxSearchRange}&cabin_class=${cabinFilter || ''}&source=${milesProgram}`
             : `origin=${origin}&date=${searchDate}&date_range=${maxSearchRange}&cabin_class=${cabinFilter || ''}&source=${milesProgram}`;
+        
+        // Add connectivity parameters for forward planning (filters out dead-end destinations)
+        if (direction === 'forward' && AppState.endDate) {
+            params += `&end_date=${AppState.endDate}&days_to_stay=${daysToStay}`;
+        }
         
         const response = await fetch(`${endpoint}?${params}`, {
             signal: AppState.currentLoadAbortController.signal

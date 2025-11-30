@@ -404,6 +404,115 @@ class SeatsAeroPartnerAPI:
             return bool(response.get("data"))
         except:
             return False
+    
+    def get_airports_with_outbound_flights(
+        self,
+        start_date: str,
+        end_date: str,
+        source: Optional[str] = None
+    ) -> Set[str]:
+        """
+        Get all airports that have outbound flights in a date range.
+        Used to validate that a destination has onward connectivity.
+        
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+            source: Miles program source
+            
+        Returns:
+            Set of airport codes that have outbound flights
+        """
+        effective_source = source or self.source
+        cache_key = self._get_cache_key("outbound_airports", start_date, end_date, effective_source)
+        
+        if self._is_cache_valid(cache_key):
+            return self._cache[cache_key]
+        
+        try:
+            # Fetch availability without origin filter to get all flights
+            # We just need the origin airports from the results
+            availability = self.get_all_availability(
+                start_date=start_date,
+                end_date=end_date,
+                max_results=5000,  # Get a good sample
+                source=effective_source
+            )
+            
+            # Extract unique origin airports
+            airports = set()
+            for record in availability:
+                route = record.get("Route", {})
+                origin = route.get("OriginAirport")
+                if origin:
+                    airports.add(origin)
+            
+            self._set_cache(cache_key, airports)
+            return airports
+        except Exception as e:
+            print(f"Error fetching airports with outbound flights: {e}")
+            return set()
+    
+    def get_flights_from_origin_with_connectivity(
+        self,
+        origin: str,
+        target_date: str,
+        date_range: int = 2,
+        source: Optional[str] = None,
+        days_to_stay: int = 3,
+        end_date: Optional[str] = None
+    ) -> List[Dict]:
+        """
+        Get flights from an origin, but only to destinations that have onward flights.
+        This prevents showing "dead end" destinations.
+        
+        Args:
+            origin: Origin airport code
+            target_date: Target date in YYYY-MM-DD format
+            date_range: Number of days forward from target date to search
+            source: Miles program source
+            days_to_stay: Days staying at destination before next flight
+            end_date: Trip end date - destinations must have flights before this
+            
+        Returns:
+            List of flight dictionaries, filtered to only viable destinations
+        """
+        # First, get all flights from origin
+        flights = self.get_flights_from_origin(origin, target_date, date_range, source)
+        
+        if not flights or not end_date:
+            return flights
+        
+        effective_source = source or self.source
+        
+        # Calculate the window for onward flights
+        # We need flights FROM each destination AFTER arriving + days_to_stay
+        # and BEFORE the trip end date
+        
+        # Get the set of airports that have outbound flights in the remaining window
+        # We use the earliest possible departure (first flight date + days_to_stay)
+        # to the trip end date
+        earliest_flight_date = min(f['date'] for f in flights) if flights else target_date
+        onward_start = (datetime.strptime(earliest_flight_date, "%Y-%m-%d") + timedelta(days=days_to_stay)).strftime("%Y-%m-%d")
+        
+        # Get airports with outbound availability
+        airports_with_outbound = self.get_airports_with_outbound_flights(
+            start_date=onward_start,
+            end_date=end_date,
+            source=effective_source
+        )
+        
+        if not airports_with_outbound:
+            # If we couldn't get the data, return all flights (fail open)
+            return flights
+        
+        # Filter to only destinations with onward connectivity
+        filtered_flights = [
+            f for f in flights 
+            if f['destination'] in airports_with_outbound
+        ]
+        
+        return filtered_flights
 
 
 # Convenience function for testing
