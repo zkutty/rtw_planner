@@ -61,6 +61,11 @@ class SeatsAeroPartnerAPI:
             params['source'] = self.source
         
         response = requests.get(url, headers=self.headers, params=params, verify=True, timeout=30)
+        
+        # Handle rate limiting gracefully
+        if response.status_code == 429:
+            raise Exception("API rate limit exceeded (1,000 calls/day). Please try again tomorrow or use the database fallback.")
+        
         response.raise_for_status()
         return response.json()
     

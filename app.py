@@ -42,7 +42,9 @@ def init_app():
     global data_source, planner_coords, _init_error, _using_api
     
     # Check for Seats.aero API key first (preferred method)
-    api_key = os.environ.get('SEATS_AERO_API_KEY')
+    # Set USE_DATABASE=true to force database mode (useful if API rate limited)
+    force_database = os.environ.get('USE_DATABASE', '').lower() in ('true', '1', 'yes')
+    api_key = os.environ.get('SEATS_AERO_API_KEY') if not force_database else None
     
     if api_key:
         try:
