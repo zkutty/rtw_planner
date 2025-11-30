@@ -417,6 +417,10 @@ async function loadFlightsFromAirport(origin, date) {
         if (loadingText) loadingText.textContent = `Loading flights from ${origin}...`;
     }
     
+    // IMPORTANT: Clear old markers immediately to prevent stale data from showing
+    clearFlightMarkers();
+    AppState.currentFlights = [];
+    
     try {
         AppState.currentOrigin = origin;
         AppState.currentDate = date;
@@ -470,6 +474,9 @@ async function loadFlightsFromAirport(origin, date) {
         const data = await response.json();
         if (data.error) {
             showError(data.error);
+            // Still show origin marker so user knows where they are
+            await zoomToAirport(origin, 6, false);
+            displayFlights([], origin, false, direction);
             return;
         }
         
