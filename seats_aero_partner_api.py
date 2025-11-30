@@ -39,7 +39,7 @@ class SeatsAeroPartnerAPI:
         # Cache for storing fetched data
         self._cache = {}
         self._cache_expiry = {}
-        self._cache_ttl = 300  # 5 minutes cache TTL
+        self._cache_ttl = 3600  # 1 hour cache TTL (saves API calls)
     
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
         """
@@ -431,11 +431,12 @@ class SeatsAeroPartnerAPI:
         
         try:
             # Fetch availability without origin filter to get all flights
-            # We just need the origin airports from the results
+            # We just need unique origin airports, so 2000 results is plenty
+            # (reduces API calls from ~10 to ~4)
             availability = self.get_all_availability(
                 start_date=start_date,
                 end_date=end_date,
-                max_results=5000,  # Get a good sample
+                max_results=2000,  # Reduced to save API calls
                 source=effective_source
             )
             
