@@ -7,6 +7,28 @@
 // STATE MANAGEMENT
 // =============================================================================
 
+// OneWorld Alliance airlines (IATA codes and names)
+const ONEWORLD_AIRLINES = {
+    codes: ['AS', 'AA', 'BA', 'CX', 'FJ', 'AY', 'IB', 'JL', 'MH', 'WY', 'QF', 'QR', 'AT', 'RJ', 'UL'],
+    names: [
+        'Alaska Airlines',
+        'American Airlines',
+        'British Airways',
+        'Cathay Pacific',
+        'Fiji Airways',
+        'Finnair',
+        'Iberia',
+        'Japan Airlines',
+        'Malaysia Airlines',
+        'Oman Air',
+        'Qantas',
+        'Qatar Airways',
+        'Royal Air Maroc',
+        'Royal Jordanian',
+        'SriLankan Airlines'
+    ]
+};
+
 const AppState = {
     // Map state
     map: null,
@@ -170,6 +192,67 @@ function formatDate(dateStr) {
     return new Date(dateStr).toLocaleDateString('en-US', { 
         weekday: 'short', month: 'short', day: 'numeric' 
     });
+}
+
+/**
+ * Check if a flight is operated by OneWorld airlines
+ * Returns true if any carrier in the flight is a OneWorld airline
+ */
+function isOneWorldFlight(flight) {
+    // Check all carrier fields (business, premium economy, economy)
+    const carriers = [
+        flight.business_carriers || '',
+        flight.premium_economy_carriers || '',
+        flight.economy_carriers || ''
+    ].filter(c => c && c.trim());
+    
+    if (carriers.length === 0) {
+        // If no carriers specified, exclude for safety (can't verify)
+        return false;
+    }
+    
+    // Combine all carrier strings and normalize to lowercase for comparison
+    const carriersString = carriers.join(' ').toLowerCase();
+    
+    // Check for OneWorld airline names (full names)
+    for (const name of ONEWORLD_AIRLINES.names) {
+        if (carriersString.includes(name.toLowerCase())) {
+            return true;
+        }
+    }
+    
+    // Check for OneWorld airline codes (2-letter IATA codes)
+    // Use word boundaries to match codes as whole words (avoid false positives like "AA" in "CAA")
+    for (const code of ONEWORLD_AIRLINES.codes) {
+        // Match code as whole word - word boundary ensures it's not part of another word
+        const codePattern = new RegExp(`\\b${code}\\b`, 'i');
+        if (codePattern.test(carriersString)) {
+            return true;
+        }
+    }
+    
+    // Also check for common airline name variations/keywords
+    const keyTerms = [
+        'qantas', 'american airlines', 'british airways', 'cathay pacific',
+        'japan airlines', 'qatar airways', 'malaysia airlines', 'iberia',
+        'finnair', 'royal jordanian', 'royal air maroc', 'srilankan',
+        'oman air', 'fiji airways', 'alaska airlines'
+    ];
+    
+    for (const term of keyTerms) {
+        if (carriersString.includes(term.toLowerCase())) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * Filter flights to only include OneWorld airlines
+ */
+function filterOneWorldFlights(flights) {
+    return flights.filter(flight => isOneWorldFlight(flight));
 }
 
 /**
@@ -519,6 +602,9 @@ async function loadFlightsFromAirport(origin, date) {
         }
         
         let flights = data.flights;
+        
+        // Filter to only include OneWorld alliance airlines
+        flights = filterOneWorldFlights(flights);
         
         // Filter by date constraints
         if (isAfterSegmentSelection) {
