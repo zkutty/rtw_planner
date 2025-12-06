@@ -838,6 +838,10 @@ async function loadContinentData(flights, direction) {
 }
 
 function applyFlightFilters() {
+    // NOTE: This function filters locally without making any API calls
+    // It only filters AppState.allFlights which was loaded from a single API call
+    // This prevents using up daily API call limits
+    
     if (!AppState.allFlights || AppState.allFlights.length === 0) {
         return;
     }
