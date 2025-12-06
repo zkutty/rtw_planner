@@ -657,11 +657,13 @@ function displayFlights(flights, origin, keepSidebarOpen = false, direction = 'f
         if (hasEconomy) availableClasses.push('Economy');
         const classesDisplay = availableClasses.length > 1 ? ` (${availableClasses.join(', ')})` : '';
         
-        const displayOrigin = direction === 'backward' ? flight.destination : flight.origin;
-        const displayDest = direction === 'backward' ? flight.origin : flight.destination;
-        const displayOriginName = direction === 'backward' ? flight.destination_name : flight.origin_name;
-        const displayDestName = direction === 'backward' ? flight.origin_name : flight.destination_name;
+        // Always display flight as origin → destination (the actual route)
+        const displayOrigin = flight.origin;
+        const displayDest = flight.destination;
+        const displayOriginName = flight.origin_name;
+        const displayDestName = flight.destination_name;
         
+        // For must-visit check: in backward mode, check the origin (where we need to get to next)
         const checkCity = direction === 'backward' ? flight.origin : flight.destination;
         const isMustVisit = AppState.mustVisitCities.includes(checkCity);
         const mustVisitBadge = isMustVisit ? '<span class="flight-badge" style="background: #FF6B6B; color: white;">Must Visit</span>' : '';
@@ -710,11 +712,18 @@ async function displayFlightsOnMap(flights, origin, direction = 'forward', targe
     clearFlightMarkers();
     AppState.currentFlights = flights;
     
-    const airports = [origin, ...flights.map(f => f.destination)];
+    // For backward planning, we show origin airports (where flights come FROM to reach our target)
+    // For forward planning, we show destination airports (where flights go TO from our location)
+    const markerAirports = direction === 'backward' 
+        ? flights.map(f => f.origin)  // Show where flights come FROM
+        : flights.map(f => f.destination);  // Show where flights go TO
+    
+    const airports = [origin, ...markerAirports];
     const coords = await getAirportCoords([...new Set(airports)]);
     
-    // Add origin marker
+    // Add the main airport marker (our target in backward, our location in forward)
     if (coords[origin]) {
+        const markerLabel = direction === 'backward' ? 'Target' : 'You';
         const originMarker = L.marker([coords[origin].lat, coords[origin].lon], {
             icon: L.divIcon({
                 className: 'origin-marker',
@@ -724,27 +733,30 @@ async function displayFlightsOnMap(flights, origin, direction = 'forward', targe
             })
         }).addTo(AppState.map);
         
-        originMarker.bindPopup(`<strong>${origin}</strong><br>${coords[origin].name}`);
+        originMarker.bindPopup(`<strong>${origin}</strong><br>${coords[origin].name}<br><em>${direction === 'backward' ? 'Your destination' : 'Your location'}</em>`);
         AppState.flightMarkers.push(originMarker);
     }
     
-    // Group flights by destination
-    const flightsByDest = {};
+    // Group flights by the airport we want to show markers for
+    const flightsByAirport = {};
     flights.forEach(flight => {
-        if (!flightsByDest[flight.destination]) flightsByDest[flight.destination] = [];
-        flightsByDest[flight.destination].push(flight);
+        // For backward: group by origin (where flights come from)
+        // For forward: group by destination (where flights go to)
+        const markerAirport = direction === 'backward' ? flight.origin : flight.destination;
+        if (!flightsByAirport[markerAirport]) flightsByAirport[markerAirport] = [];
+        flightsByAirport[markerAirport].push(flight);
     });
     
-    // Add destination markers and routes
-    Object.entries(flightsByDest).forEach(([dest, destFlights]) => {
-        if (!coords[dest]) return;
+    // Add markers for each airport we can fly to/from
+    Object.entries(flightsByAirport).forEach(([airport, airportFlights]) => {
+        if (!coords[airport]) return;
         
-        const hasBusiness = destFlights.some(f => f.business_miles_int > 0);
-        const hasPremium = destFlights.some(f => f.premium_economy_miles_int > 0);
+        const hasBusiness = airportFlights.some(f => f.business_miles_int > 0);
+        const hasPremium = airportFlights.some(f => f.premium_economy_miles_int > 0);
         
         let markerColor = hasBusiness ? '#667eea' : hasPremium ? '#4CAF50' : '#FF9800';
         
-        const hasFlightsInRange = targetDateRange && destFlights.some(f => {
+        const hasFlightsInRange = targetDateRange && airportFlights.some(f => {
             const flightDate = new Date(f.date);
             return flightDate >= targetDateRange.start && flightDate <= targetDateRange.end;
         });
@@ -754,40 +766,40 @@ async function displayFlightsOnMap(flights, origin, direction = 'forward', targe
         
         const originalIcon = L.divIcon({
             className: 'destination-marker',
-            html: `<div style="background: ${markerColor}; color: white; border-radius: 50%; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.7rem; border: ${borderWidth} solid ${borderColor}; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">${dest}</div>`,
+            html: `<div style="background: ${markerColor}; color: white; border-radius: 50%; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.7rem; border: ${borderWidth} solid ${borderColor}; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">${airport}</div>`,
             iconSize: [25, 25],
             iconAnchor: [12, 12]
         });
         
-        const destCoords = [coords[dest].lat, coords[dest].lon];
-        const originCoords = [coords[origin].lat, coords[origin].lon];
+        const airportCoords = [coords[airport].lat, coords[airport].lon];
+        const mainCoords = [coords[origin].lat, coords[origin].lon];
         
-        const marker = L.marker(destCoords, { icon: originalIcon }).addTo(AppState.map);
+        const marker = L.marker(airportCoords, { icon: originalIcon }).addTo(AppState.map);
         marker._originalIcon = originalIcon;
         marker._inRange = hasFlightsInRange;
-        marker._destination = dest;
+        marker._destination = airport;  // Keep this name for filterByDestination compatibility
         marker._cabinClass = hasBusiness ? 'business' : hasPremium ? 'premium' : 'economy';
         
         const cabinInfo = [];
         if (hasBusiness) cabinInfo.push('Business');
         if (hasPremium) cabinInfo.push('Premium Economy');
-        if (destFlights.some(f => f.economy_miles_int > 0)) cabinInfo.push('Economy');
+        if (airportFlights.some(f => f.economy_miles_int > 0)) cabinInfo.push('Economy');
         
         marker.bindPopup(`
-            <strong>${dest}</strong><br>
-            ${coords[dest].name}<br>
+            <strong>${airport}</strong><br>
+            ${coords[airport].name}<br>
             <strong>Classes:</strong> ${cabinInfo.join(', ')}<br>
-            <strong>Flights:</strong> ${destFlights.length}<br>
-            <button onclick="filterByDestination('${dest}')" style="margin-top: 8px; padding: 4px 8px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">View Flights</button>
+            <strong>Flights:</strong> ${airportFlights.length}<br>
+            <button onclick="filterByDestination('${airport}')" style="margin-top: 8px; padding: 4px 8px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">View Flights</button>
         `);
-        marker.bindTooltip(coords[dest].name, { permanent: false, direction: 'top', offset: [0, -10] });
-        marker.on('click', () => filterByDestination(dest));
+        marker.bindTooltip(coords[airport].name, { permanent: false, direction: 'top', offset: [0, -10] });
+        marker.on('click', () => filterByDestination(airport));
         
         AppState.flightMarkers.push(marker);
         
         // Add route lines
-        destFlights.forEach(flight => {
-            const path = getGreatCirclePath(originCoords, destCoords);
+        airportFlights.forEach(flight => {
+            const path = getGreatCirclePath(mainCoords, airportCoords);
             const line = L.polyline(path, {
                 color: flight.is_direct ? markerColor : '#FF9800',
                 weight: 2,
@@ -810,13 +822,19 @@ async function displayFlightsOnMap(flights, origin, direction = 'forward', targe
     }
 }
 
-function filterByDestination(destination) {
-    AppState.filteredDestination = destination;
-    const filtered = AppState.currentFlights.filter(f => f.destination === destination);
+function filterByDestination(airport) {
+    AppState.filteredDestination = airport;
+    
+    // For backward planning, filter by origin (where flights come from)
+    // For forward planning, filter by destination (where flights go to)
+    const filtered = AppState.planningDirection === 'backward'
+        ? AppState.currentFlights.filter(f => f.origin === airport)
+        : AppState.currentFlights.filter(f => f.destination === airport);
+    
     const targetDateRange = calculateTargetDateRange();
     displayFlights(filtered, AppState.currentOrigin, true, AppState.planningDirection, targetDateRange);
     
-    const marker = AppState.flightMarkers.find(m => m._destination === destination);
+    const marker = AppState.flightMarkers.find(m => m._destination === airport);
     marker?.openPopup();
 }
 
