@@ -893,18 +893,18 @@ async function selectFlight(index, origin, destination, date, isDirect, numStops
         const destCoords = [coords[destination].lat, coords[destination].lon];
         const distance = calculateDistance(originCoords, destCoords);
         
-        // Determine actual origin/destination based on planning direction
-        const actualOrigin = AppState.planningDirection === 'backward' ? destination : origin;
-        const actualDest = AppState.planningDirection === 'backward' ? origin : destination;
+        // A flight is always origin → destination, regardless of planning direction
+        // In backward mode, we're selecting flights TO our target, but the flight itself
+        // still goes from its origin to its destination
         
         // Determine cabin class
         const cabinClass = businessMiles > 0 ? 'Business' : premiumEconomyMiles > 0 ? 'Premium Economy' : 'Economy';
         
-        // Create segment
+        // Create segment - flight goes from origin to destination
         const segment = {
             segment: AppState.selectedSegments.length + 1,
-            origin: actualOrigin,
-            destination: actualDest,
+            origin: origin,
+            destination: destination,
             date,
             is_direct: isDirect,
             num_stops: numStops,
