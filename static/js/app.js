@@ -1297,6 +1297,11 @@ async function selectFlight(index, origin, destination, date, isDirect, numStops
         updateTripSummary();
         updateButtons();
         
+        // Update table view if active
+        if (document.getElementById('table-view-container')?.classList.contains('active')) {
+            updateSelectedFlightsTable();
+        }
+        
         // Mark flight item as selected
         document.querySelectorAll('.flight-item').forEach(item => item.classList.remove('selected'));
         document.querySelector(`[data-flight-index="${index}"]`)?.classList.add('selected');
@@ -1964,6 +1969,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('validation-modal')?.addEventListener('click', (e) => {
         if (e.target.id === 'validation-modal') e.target.classList.remove('show');
     });
+    
+    // Tab navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabName = btn.dataset.tab;
+            switchTab(tabName);
+        });
+    });
+    
+    // Table view initialization
+    initTableView();
 });
 
 // =============================================================================
@@ -1983,3 +1999,504 @@ window.validateTrip = validateTrip;
 window.filterByDestination = filterByDestination;
 window.clearDestinationFilter = clearDestinationFilter;
 window.editSegmentDate = editSegmentDate;
+window.clearTableFilters = clearTableFilters;
+
+// =============================================================================
+// TABLE VIEW FUNCTIONALITY
+// =============================================================================
+
+// Table view state
+const TableViewState = {
+    availableFlights: [],
+    filteredFlights: [],
+    currentOrigin: null,
+    currentDate: null,
+    loadingFlights: false
+};
+
+// Tab switching
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        if (btn.dataset.tab === tabName) {
+            btn.classList.add('active');
+            btn.style.color = 'white';
+            btn.style.borderBottomColor = 'white';
+        } else {
+            btn.classList.remove('active');
+            btn.style.color = 'rgba(255,255,255,0.7)';
+            btn.style.borderBottomColor = 'transparent';
+        }
+    });
+    
+    // Show/hide view containers
+    if (tabName === 'map-view') {
+        document.getElementById('map-view-container').classList.add('active');
+        document.getElementById('map-view-container').style.display = 'flex';
+        document.getElementById('table-view-container').classList.remove('active');
+        document.getElementById('table-view-container').style.display = 'none';
+    } else if (tabName === 'table-view') {
+        document.getElementById('table-view-container').classList.add('active');
+        document.getElementById('table-view-container').style.display = 'flex';
+        document.getElementById('map-view-container').classList.remove('active');
+        document.getElementById('map-view-container').style.display = 'none';
+        
+        // Update selected flights table when switching to table view
+        updateSelectedFlightsTable();
+        
+        // If we have segments but no available flights loaded, load from last segment
+        if (AppState.selectedSegments.length > 0 && TableViewState.availableFlights.length === 0) {
+            const lastSegment = AppState.selectedSegments[AppState.selectedSegments.length - 1];
+            const direction = AppState.planningDirection || 'forward';
+            const nextOrigin = direction === 'backward' ? lastSegment.origin : lastSegment.destination;
+            const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
+            const lastDate = new Date(lastSegment.date);
+            
+            let nextDate = new Date(lastDate);
+            if (direction === 'backward') {
+                nextDate.setDate(nextDate.getDate() - daysToStay);
+            } else {
+                nextDate.setDate(nextDate.getDate() + daysToStay);
+            }
+            
+            document.getElementById('table-filter-origin').value = nextOrigin;
+            loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], direction);
+        }
+    }
+}
+
+// Initialize table view
+function initTableView() {
+    // Load initial flights button
+    document.getElementById('table-load-flights-btn')?.addEventListener('click', () => {
+        const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
+        const startDate = document.getElementById('start-date')?.value || '2026-03-27';
+        const direction = document.getElementById('planning-direction')?.value || 'backward';
+        
+        const origin = startingAirports[0].trim().toUpperCase();
+        loadFlightsForTableView(origin, startDate, direction);
+    });
+    
+    // Table clear all button
+    document.getElementById('table-clear-all-btn')?.addEventListener('click', () => {
+        if (AppState.selectedSegments.length > 0 && confirm('Clear all selected flights?')) {
+            clearAll();
+            updateSelectedFlightsTable();
+            TableViewState.availableFlights = [];
+            TableViewState.filteredFlights = [];
+            updateAvailableFlightsTable();
+        }
+    });
+    
+    // Table filter listeners
+    ['table-filter-origin', 'table-filter-date-start', 'table-filter-date-end', 
+     'table-filter-class', 'table-filter-airline', 'table-filter-continent'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', applyTableFilters);
+            if (id.includes('date') || id === 'table-filter-airline' || id === 'table-filter-origin') {
+                el.addEventListener('input', debounce(applyTableFilters, 300));
+            }
+        }
+    });
+}
+
+// Load flights for table view
+async function loadFlightsForTableView(origin, date, direction) {
+    if (TableViewState.loadingFlights) return;
+    
+    TableViewState.loadingFlights = true;
+    TableViewState.currentOrigin = origin;
+    TableViewState.currentDate = date;
+    
+    const btn = document.getElementById('table-load-flights-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+    }
+    
+    try {
+        const endpoint = direction === 'backward' ? '/api/flights-to' : '/api/flights';
+        const milesProgram = document.getElementById('miles-program')?.value || 'qantas';
+        const dateRange = parseInt(document.getElementById('date-range')?.value || '1');
+        
+        const params = direction === 'backward'
+            ? `destination=${origin}&date=${date}&date_range=${dateRange}&source=${milesProgram}`
+            : `origin=${origin}&date=${date}&date_range=${dateRange}&source=${milesProgram}`;
+        
+        const response = await fetch(`${endpoint}?${params}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            showError(data.error);
+            return;
+        }
+        
+        let flights = data.flights || [];
+        
+        // Filter OneWorld flights
+        flights = filterOneWorldFlights(flights);
+        
+        // Load continent data for filtering
+        await loadContinentData(flights, direction);
+        
+        // Store flights
+        TableViewState.availableFlights = flights;
+        TableViewState.filteredFlights = flights;
+        
+        // Apply existing filters
+        applyTableFilters();
+        
+        // Update origin filter to show current origin
+        const originFilter = document.getElementById('table-filter-origin');
+        if (originFilter) originFilter.value = origin;
+        
+    } catch (error) {
+        console.error('Error loading flights:', error);
+        showError('Failed to load flights');
+    } finally {
+        TableViewState.loadingFlights = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Load Initial Flights';
+        }
+    }
+}
+
+// Apply table filters
+function applyTableFilters() {
+    let filtered = [...TableViewState.availableFlights];
+    
+    const origin = document.getElementById('table-filter-origin')?.value?.trim().toUpperCase();
+    const dateStart = document.getElementById('table-filter-date-start')?.value;
+    const dateEnd = document.getElementById('table-filter-date-end')?.value;
+    const classFilter = document.getElementById('table-filter-class')?.value;
+    const airlineFilter = document.getElementById('table-filter-airline')?.value?.toLowerCase();
+    const continentFilter = document.getElementById('table-filter-continent')?.value;
+    
+    // Origin filter
+    if (origin) {
+        const direction = AppState.planningDirection || 'forward';
+        filtered = filtered.filter(flight => {
+            const airport = direction === 'backward' ? flight.origin : flight.destination;
+            return airport === origin;
+        });
+    }
+    
+    // Date range filter
+    if (dateStart || dateEnd) {
+        filtered = filtered.filter(flight => {
+            const flightDate = new Date(flight.date);
+            flightDate.setHours(0, 0, 0, 0);
+            
+            if (dateStart) {
+                const start = new Date(dateStart);
+                start.setHours(0, 0, 0, 0);
+                if (flightDate < start) return false;
+            }
+            
+            if (dateEnd) {
+                const end = new Date(dateEnd);
+                end.setHours(0, 0, 0, 0);
+                if (flightDate > end) return false;
+            }
+            
+            return true;
+        });
+    }
+    
+    // Class filter
+    if (classFilter) {
+        filtered = filtered.filter(flight => {
+            if (classFilter === 'business' && flight.business_miles_int === 0) return false;
+            if (classFilter === 'premium' && flight.business_miles_int === 0 && flight.premium_economy_miles_int === 0) return false;
+            if (classFilter === 'economy' && flight.economy_miles_int === 0) return false;
+            return true;
+        });
+    }
+    
+    // Airline filter
+    if (airlineFilter) {
+        filtered = filtered.filter(flight => {
+            const carriers = [
+                flight.business_carriers || '',
+                flight.premium_economy_carriers || '',
+                flight.economy_carriers || ''
+            ].join(' ').toLowerCase();
+            
+            return carriers.includes(airlineFilter);
+        });
+    }
+    
+    // Continent filter
+    if (continentFilter) {
+        filtered = filtered.filter(flight => {
+            const direction = AppState.planningDirection || 'forward';
+            const airport = direction === 'backward' ? flight.origin : flight.destination;
+            const continent = AppState.airportContinents[airport];
+            // If continent data not loaded yet, include the flight (will be filtered when data loads)
+            if (!continent) return true;
+            return continent === continentFilter;
+        });
+    }
+    
+    TableViewState.filteredFlights = filtered;
+    updateAvailableFlightsTable();
+}
+
+// Clear table filters
+function clearTableFilters() {
+    document.getElementById('table-filter-origin').value = '';
+    document.getElementById('table-filter-date-start').value = '';
+    document.getElementById('table-filter-date-end').value = '';
+    document.getElementById('table-filter-class').value = '';
+    document.getElementById('table-filter-airline').value = '';
+    document.getElementById('table-filter-continent').value = '';
+    
+    TableViewState.filteredFlights = [...TableViewState.availableFlights];
+    updateAvailableFlightsTable();
+}
+
+// Update available flights table
+function updateAvailableFlightsTable() {
+    const tbody = document.getElementById('available-flights-tbody');
+    const countSpan = document.getElementById('table-flights-count');
+    
+    if (!tbody) return;
+    
+    const flights = TableViewState.filteredFlights || [];
+    
+    if (countSpan) {
+        countSpan.textContent = `(${flights.length} flight${flights.length !== 1 ? 's' : ''})`;
+    }
+    
+    if (flights.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: #999;">No flights found. Adjust filters or load flights.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = flights.map((flight, index) => {
+        const hasBusiness = flight.business_miles_int > 0;
+        const hasPremium = flight.premium_economy_miles_int > 0;
+        const hasEconomy = flight.economy_miles_int > 0;
+        
+        let cabinClass, miles, carriers;
+        if (hasBusiness) {
+            cabinClass = 'Business';
+            miles = flight.business_miles_int;
+            carriers = flight.business_carriers || 'N/A';
+        } else if (hasPremium) {
+            cabinClass = 'Premium Economy';
+            miles = flight.premium_economy_miles_int;
+            carriers = flight.premium_economy_carriers || 'N/A';
+        } else {
+            cabinClass = 'Economy';
+            miles = flight.economy_miles_int;
+            carriers = flight.economy_carriers || 'N/A';
+        }
+        
+        const direction = AppState.planningDirection || 'forward';
+        const route = direction === 'backward' 
+            ? `${flight.origin} → ${flight.destination}` 
+            : `${flight.origin} → ${flight.destination}`;
+        
+        return `
+            <tr>
+                <td><strong>${route}</strong></td>
+                <td>${formatDate(flight.date)}</td>
+                <td>${cabinClass}</td>
+                <td>${miles ? miles.toLocaleString() : 'N/A'}</td>
+                <td>${flight.distance_miles ? flight.distance_miles.toFixed(0) : 'N/A'} mi</td>
+                <td>${carriers}</td>
+                <td>${flight.is_direct ? 'Yes' : `${flight.num_stops} stop${flight.num_stops !== 1 ? 's' : ''}`}</td>
+                <td>
+                    <button class="action-btn btn-select" onclick="selectFlightFromTable(${index})">Select</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Select flight from table
+async function selectFlightFromTable(index) {
+    const flight = TableViewState.filteredFlights[index];
+    if (!flight) return;
+    
+    const direction = AppState.planningDirection || 'forward';
+    
+    // Use existing selectFlight function but with table-specific logic
+    const cabinMiles = flight.business_miles_int || flight.premium_economy_miles_int || flight.economy_miles_int || 0;
+    const businessMiles = flight.business_miles_int || 0;
+    const premiumMiles = flight.premium_economy_miles_int || 0;
+    const economyMiles = flight.economy_miles_int || 0;
+    
+    // Use -1 as index since we're selecting from table, not sidebar
+    await selectFlight(
+        -1,
+        flight.origin,
+        flight.destination,
+        flight.date,
+        flight.is_direct,
+        flight.num_stops || 0,
+        businessMiles,
+        premiumMiles,
+        economyMiles,
+        flight.business_carriers || '',
+        flight.premium_economy_carriers || '',
+        flight.economy_carriers || ''
+    );
+    
+    // Update selected flights table
+    updateSelectedFlightsTable();
+    
+    // Auto-load next flights from destination
+    const nextOrigin = direction === 'backward' ? flight.origin : flight.destination;
+    const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
+    const flightDate = new Date(flight.date);
+    
+    let nextDate = new Date(flightDate);
+    if (direction === 'backward') {
+        nextDate.setDate(nextDate.getDate() - daysToStay);
+    } else {
+        nextDate.setDate(nextDate.getDate() + daysToStay);
+    }
+    
+    // Update origin filter and load next flights
+    document.getElementById('table-filter-origin').value = nextOrigin;
+    await loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], direction);
+}
+
+// Update selected flights table
+function updateSelectedFlightsTable() {
+    const tbody = document.getElementById('selected-flights-tbody');
+    if (!tbody) return;
+    
+    const segments = AppState.selectedSegments || [];
+    
+    if (segments.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 2rem; color: #999;">No flights selected yet</td></tr>';
+        return;
+    }
+    
+    let cumulativeDistance = 0;
+    
+    tbody.innerHTML = segments.map((seg, index) => {
+        cumulativeDistance += seg.distance_miles || 0;
+        
+        // Calculate arrival date - most flights arrive same day, long flights may arrive next day
+        const departureDate = new Date(seg.date);
+        const arrivalDate = new Date(departureDate);
+        const flightHours = Math.ceil((seg.distance_miles || 0) / 500);
+        arrivalDate.setHours(arrivalDate.getHours() + flightHours);
+        
+        // If flight duration would push into next day, set to next day
+        if (arrivalDate.getDate() !== departureDate.getDate()) {
+            // Already next day, keep it
+        } else if (flightHours > 12) {
+            // Very long flight, likely arrives next day
+            arrivalDate.setDate(arrivalDate.getDate() + 1);
+            arrivalDate.setHours(6, 0, 0, 0); // Typical arrival time
+        }
+        
+        // Calculate time at location (from arrival date to next departure)
+        let timeAtLocation = 'N/A';
+        if (index < segments.length - 1) {
+            const nextSegment = segments[index + 1];
+            const nextDeparture = new Date(nextSegment.date);
+            nextDeparture.setHours(0, 0, 0, 0);
+            
+            // Use arrival date (reset hours for comparison)
+            const arrivalDateOnly = new Date(arrivalDate);
+            arrivalDateOnly.setHours(0, 0, 0, 0);
+            
+            const daysDiff = Math.round((nextDeparture - arrivalDateOnly) / (1000 * 60 * 60 * 24));
+            if (daysDiff >= 0) {
+                timeAtLocation = `${daysDiff} day${daysDiff !== 1 ? 's' : ''}`;
+            } else {
+                timeAtLocation = '0 days';
+            }
+        }
+        
+        const airlineInfo = seg.business_carriers || seg.premium_economy_carriers || seg.economy_carriers || 'N/A';
+        const arrivalDateStr = arrivalDate.toISOString().split('T')[0];
+        
+        // Get airport names (will be loaded asynchronously, show codes for now)
+        const originName = AppState.airportCoordsCache[seg.origin]?.name || seg.origin;
+        const destName = AppState.airportCoordsCache[seg.destination]?.name || seg.destination;
+        
+        return `
+            <tr class="selected-flight">
+                <td>${index + 1}</td>
+                <td>
+                    <strong>${seg.origin} → ${seg.destination}</strong><br>
+                    <small style="color: #666;">${originName} → ${destName}</small>
+                </td>
+                <td>${formatDate(seg.date)}<br><small style="color: #666;">${seg.date}</small></td>
+                <td>${formatDate(arrivalDateStr)}<br><small style="color: #666;">${arrivalDateStr}</small></td>
+                <td>${timeAtLocation}</td>
+                <td>${(seg.distance_miles || 0).toFixed(0)} mi</td>
+                <td>${cumulativeDistance.toFixed(0)} mi</td>
+                <td>${seg.cabin_class || 'N/A'}</td>
+                <td><small>${airlineInfo}</small></td>
+                <td>
+                    <button class="action-btn btn-remove" onclick="removeFlightFromTable(${index})" title="Remove this flight and all after it">Remove</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    // Enable/disable clear button
+    const clearBtn = document.getElementById('table-clear-all-btn');
+    if (clearBtn) {
+        clearBtn.disabled = segments.length === 0;
+    }
+}
+
+// Remove flight from table (keeping earlier ones)
+function removeFlightFromTable(segmentIndex) {
+    if (segmentIndex < 0 || segmentIndex >= AppState.selectedSegments.length) return;
+    
+    // Remove this segment and all after it
+    const segmentsToRemove = AppState.selectedSegments.length - segmentIndex;
+    for (let i = 0; i < segmentsToRemove; i++) {
+        AppState.selectedSegments.pop();
+    }
+    
+    // Update global reference
+    window.selectedSegments = AppState.selectedSegments;
+    
+    // Update UI
+    updateSelectedFlightsTable();
+    updateTripSummary();
+    updateButtons();
+    redrawSelectedRoutes();
+    
+    // Reload flights from the last remaining segment's destination
+    if (AppState.selectedSegments.length > 0) {
+        const lastSegment = AppState.selectedSegments[AppState.selectedSegments.length - 1];
+        const direction = AppState.planningDirection || 'forward';
+        const nextOrigin = direction === 'backward' ? lastSegment.origin : lastSegment.destination;
+        const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
+        const lastDate = new Date(lastSegment.date);
+        
+        let nextDate = new Date(lastDate);
+        if (direction === 'backward') {
+            nextDate.setDate(nextDate.getDate() - daysToStay);
+        } else {
+            nextDate.setDate(nextDate.getDate() + daysToStay);
+        }
+        
+        document.getElementById('table-filter-origin').value = nextOrigin;
+        loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], direction);
+    } else {
+        // Clear available flights if no segments remain
+        TableViewState.availableFlights = [];
+        TableViewState.filteredFlights = [];
+        updateAvailableFlightsTable();
+    }
+}
+
+// Make functions globally accessible
+window.switchTab = switchTab;
+window.selectFlightFromTable = selectFlightFromTable;
+window.removeFlightFromTable = removeFlightFromTable;

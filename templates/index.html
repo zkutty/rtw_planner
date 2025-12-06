@@ -19,8 +19,19 @@
             <div style="text-align: center; margin-top: 0.5rem;">
                 <a href="/suggestions" style="color: #667eea; text-decoration: none; font-weight: 500;">🔍 Try Trip Suggestions</a>
             </div>
+            <!-- Tab Navigation -->
+            <div class="tab-navigation" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; border-bottom: 2px solid rgba(255,255,255,0.2);">
+                <button class="tab-btn active" data-tab="map-view" style="background: transparent; border: none; color: white; padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                    🗺️ Map View
+                </button>
+                <button class="tab-btn" data-tab="table-view" style="background: transparent; border: none; color: rgba(255,255,255,0.7); padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                    📊 Table View
+                </button>
+            </div>
         </header>
 
+        <!-- Map View (default) -->
+        <div class="view-container active" id="map-view-container">
         <div class="main-content">
             <!-- Control Panel -->
             <div class="control-panel">
@@ -242,6 +253,209 @@
                 <p class="empty-state">Select an airport to see available flights</p>
             </div>
         </div>
+        </div>
+        <!-- End Map View Container -->
+        
+        <!-- Shared Bottom Panel - Trip Summary & Actions -->
+        <div class="bottom-panel" id="bottom-panel">
+            <!-- Expand/Collapse Toggle -->
+            <button class="expand-toggle" id="expand-toggle" title="Expand/Collapse">
+                <span class="expand-icon">▲</span>
+                <span class="expand-text">Expand Trip Summary</span>
+            </button>
+            
+            <div class="bottom-panel-content">
+                <div class="bottom-panel-section summary-section">
+                    <h3>Trip Summary</h3>
+                    <div id="trip-summary">
+                        <p class="empty-state">No segments selected yet</p>
+                    </div>
+                </div>
+                <div class="bottom-panel-section">
+                    <div id="trip-requirements" style="padding: 0.75rem; background: #f9f9f9; border-radius: 4px; font-size: 0.8rem; display: none;">
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: #667eea;">oneworld RTW Requirements</h4>
+                        <div id="requirements-status"></div>
+                    </div>
+                </div>
+                <div class="bottom-panel-section">
+                    <div class="button-group" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button id="undo-btn" class="btn btn-secondary" disabled>← Undo Last</button>
+                        <button id="clear-btn" class="btn btn-secondary" disabled>Clear All</button>
+                        <button id="copy-trip-btn" class="btn btn-secondary" disabled>📋 Copy Trip</button>
+                        <button id="validate-btn" class="btn btn-primary" disabled>Validate Trip</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flight Options Sidebar (Map View Only) -->
+        <div class="sidebar" id="flight-sidebar">
+            <div class="sidebar-header">
+                <h3>Available Flights</h3>
+                <button class="close-btn" id="close-sidebar">×</button>
+            </div>
+            <!-- Flight Filters -->
+            <div id="flight-filters" class="flight-filters" style="display: none;">
+                <div class="filter-group">
+                    <label>Continent:</label>
+                    <select id="filter-continent" style="width: 100%; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                        <option value="">All Continents</option>
+                        <option value="North America">North America</option>
+                        <option value="South America">South America</option>
+                        <option value="Europe">Europe</option>
+                        <option value="Asia">Asia</option>
+                        <option value="Oceania">Oceania</option>
+                        <option value="Africa">Africa</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Date Range:</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="date" id="filter-date-start" style="flex: 1; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                        <span>to</span>
+                        <input type="date" id="filter-date-end" style="flex: 1; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>Cabin Class:</label>
+                    <select id="filter-class" style="width: 100%; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                        <option value="">All Classes</option>
+                        <option value="business">Business</option>
+                        <option value="premium">Premium Economy</option>
+                        <option value="economy">Economy</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Flight Type:</label>
+                    <select id="filter-stops" style="width: 100%; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                        <option value="">All Flights</option>
+                        <option value="direct">Direct Only</option>
+                        <option value="1-stop">1 Stop</option>
+                        <option value="2+stops">2+ Stops</option>
+                    </select>
+                </div>
+                <button onclick="clearFlightFilters()" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem; padding: 0.5rem; font-size: 0.85rem;">Clear Filters</button>
+            </div>
+            <div class="sidebar-content" id="flight-list">
+                <p class="empty-state">Select an airport to see available flights</p>
+            </div>
+        </div>
+
+        <!-- Table View -->
+        <div class="view-container" id="table-view-container" style="display: none;">
+            <div class="table-view-wrapper">
+                <!-- Table View Controls -->
+                <div class="table-view-controls">
+                    <div class="table-controls-left">
+                        <h3>Flight Selection Table</h3>
+                        <p style="font-size: 0.85rem; color: #666; margin-top: 0.25rem;">Select flights to build your trip</p>
+                    </div>
+                    <div class="table-controls-right">
+                        <button id="table-load-flights-btn" class="btn btn-primary">Load Initial Flights</button>
+                        <button id="table-clear-all-btn" class="btn btn-secondary" disabled>Clear All</button>
+                    </div>
+                </div>
+
+                <!-- Table Filters -->
+                <div class="table-filters">
+                    <div class="filter-row">
+                        <div class="filter-item">
+                            <label>Origin Airport:</label>
+                            <input type="text" id="table-filter-origin" placeholder="JFK" style="width: 100px; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div class="filter-item">
+                            <label>Date Range:</label>
+                            <input type="date" id="table-filter-date-start" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                            <span style="margin: 0 0.5rem;">to</span>
+                            <input type="date" id="table-filter-date-end" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div class="filter-item">
+                            <label>Class:</label>
+                            <select id="table-filter-class" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">All</option>
+                                <option value="business">Business</option>
+                                <option value="premium">Premium Economy</option>
+                                <option value="economy">Economy</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label>Airline:</label>
+                            <input type="text" id="table-filter-airline" placeholder="Qantas, BA, etc." style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+                        </div>
+                        <div class="filter-item">
+                            <label>Continent:</label>
+                            <select id="table-filter-continent" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="">All</option>
+                                <option value="North America">North America</option>
+                                <option value="South America">South America</option>
+                                <option value="Europe">Europe</option>
+                                <option value="Asia">Asia</option>
+                                <option value="Oceania">Oceania</option>
+                                <option value="Africa">Africa</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <button onclick="clearTableFilters()" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.85rem;">Clear Filters</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selected Flights Table -->
+                <div class="table-section">
+                    <h4>Selected Flights</h4>
+                    <div class="table-container">
+                        <table id="selected-flights-table" class="flights-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Route</th>
+                                    <th>Departure Date</th>
+                                    <th>Arrival Date</th>
+                                    <th>Time at Location</th>
+                                    <th>Distance</th>
+                                    <th>Cumulative Distance</th>
+                                    <th>Class</th>
+                                    <th>Airlines</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="selected-flights-tbody">
+                                <tr>
+                                    <td colspan="10" style="text-align: center; padding: 2rem; color: #999;">No flights selected yet</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Available Flights Table -->
+                <div class="table-section">
+                    <h4>Available Flights <span id="table-flights-count" style="color: #666; font-size: 0.85rem; font-weight: normal;">(0 flights)</span></h4>
+                    <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                        <table id="available-flights-table" class="flights-table">
+                            <thead>
+                                <tr>
+                                    <th>Route</th>
+                                    <th>Date</th>
+                                    <th>Class</th>
+                                    <th>Miles</th>
+                                    <th>Distance</th>
+                                    <th>Airlines</th>
+                                    <th>Direct</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="available-flights-tbody">
+                                <tr>
+                                    <td colspan="8" style="text-align: center; padding: 2rem; color: #999;">Click "Load Initial Flights" to begin</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- End Table View Container -->
     </div>
 
     <!-- Validation Modal -->
