@@ -195,6 +195,48 @@
                 <h3>Available Flights</h3>
                 <button class="close-btn" id="close-sidebar">×</button>
             </div>
+            <!-- Flight Filters -->
+            <div id="flight-filters" class="flight-filters" style="display: none;">
+                <div class="filter-group">
+                    <label>Continent:</label>
+                    <select id="filter-continent" style="width: 100%; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                        <option value="">All Continents</option>
+                        <option value="North America">North America</option>
+                        <option value="South America">South America</option>
+                        <option value="Europe">Europe</option>
+                        <option value="Asia">Asia</option>
+                        <option value="Oceania">Oceania</option>
+                        <option value="Africa">Africa</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Date Range:</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="date" id="filter-date-start" style="flex: 1; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                        <span>to</span>
+                        <input type="date" id="filter-date-end" style="flex: 1; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>Cabin Class:</label>
+                    <select id="filter-class" style="width: 100%; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                        <option value="">All Classes</option>
+                        <option value="business">Business</option>
+                        <option value="premium">Premium Economy</option>
+                        <option value="economy">Economy</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Flight Type:</label>
+                    <select id="filter-stops" style="width: 100%; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                        <option value="">All Flights</option>
+                        <option value="direct">Direct Only</option>
+                        <option value="1-stop">1 Stop</option>
+                        <option value="2+stops">2+ Stops</option>
+                    </select>
+                </div>
+                <button onclick="clearFlightFilters()" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem; padding: 0.5rem; font-size: 0.85rem;">Clear Filters</button>
+            </div>
             <div class="sidebar-content" id="flight-list">
                 <p class="empty-state">Select an airport to see available flights</p>
             </div>

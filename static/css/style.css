@@ -521,6 +521,24 @@ header h1 {
     min-height: 0;
 }
 
+.flight-filters {
+    padding: var(--spacing-md);
+    border-bottom: 2px solid var(--color-border);
+    background: #f9f9f9;
+}
+
+.filter-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.filter-group label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 0.25rem;
+}
+
 /* =============================================================================
    FLIGHT ITEMS
    ============================================================================= */

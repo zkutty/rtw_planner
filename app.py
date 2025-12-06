@@ -552,6 +552,66 @@ def get_airport_names():
     return jsonify(names)
 
 
+@app.route('/api/airport-continent', methods=['GET'])
+def get_airport_continent():
+    """Get continent for airports"""
+    from interactive_rtw_planner import OneWorldRTWValidator
+    from airport_data import get_airport_info
+    
+    airports = request.args.getlist('airports')
+    continents = {}
+    
+    for a in airports:
+        code = a.upper()
+        # First try the hardcoded mapping
+        continent = OneWorldRTWValidator.get_continent(code)
+        
+        # If not found, try to infer from country/coordinates
+        if not continent:
+            info = get_airport_info(code)
+            if info:
+                continent = _infer_continent_from_country(info.get('country', ''), info.get('lat', 0), info.get('lon', 0))
+        
+        continents[code] = continent
+    
+    return jsonify(continents)
+
+
+def _infer_continent_from_country(country: str, lat: float, lon: float) -> Optional[str]:
+    """Infer continent from country name or coordinates"""
+    country_lower = country.lower()
+    
+    # Quick country-based checks
+    if any(x in country_lower for x in ['united states', 'canada', 'mexico', 'usa']):
+        return 'North America'
+    if any(x in country_lower for x in ['brazil', 'argentina', 'chile', 'peru', 'colombia']):
+        return 'South America'
+    if any(x in country_lower for x in ['united kingdom', 'france', 'germany', 'spain', 'italy', 'netherlands', 'switzerland', 'austria', 'belgium', 'portugal', 'ireland', 'denmark', 'sweden', 'norway', 'finland', 'greece', 'poland', 'czech', 'hungary']):
+        return 'Europe'
+    if any(x in country_lower for x in ['china', 'japan', 'south korea', 'india', 'thailand', 'singapore', 'malaysia', 'indonesia', 'philippines', 'vietnam', 'taiwan', 'hong kong']):
+        return 'Asia'
+    if any(x in country_lower for x in ['australia', 'new zealand', 'fiji', 'papua new guinea']):
+        return 'Oceania'
+    if any(x in country_lower for x in ['south africa', 'egypt', 'kenya', 'morocco', 'tanzania', 'ethiopia']):
+        return 'Africa'
+    
+    # Fallback to coordinate-based detection
+    if -50 <= lat <= 70 and -180 <= lon <= -50:
+        return 'North America'
+    elif 35 <= lat <= 70 and -10 <= lon <= 40:
+        return 'Europe'
+    elif -10 <= lat <= 50 and 60 <= lon <= 180:
+        return 'Asia'
+    elif -50 <= lat <= -10 and 110 <= lon <= 180:
+        return 'Oceania'
+    elif -60 <= lat <= 15 and -90 <= lon <= -30:
+        return 'South America'
+    elif -35 <= lat <= 35 and -20 <= lon <= 55:
+        return 'Africa'
+    
+    return None
+
+
 @app.route('/api/airport-has-flights', methods=['GET'])
 def airport_has_flights():
     """Check if an airport has flights"""
