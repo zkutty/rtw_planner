@@ -122,16 +122,20 @@ function calculateTargetDateRange() {
     const planningMode = document.getElementById('planning-mode')?.value || 'days';
     const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
     const dateRangeFilter = parseInt(document.getElementById('date-range')?.value || '2');
+    const isBackward = AppState.planningDirection === 'backward';
     
     let targetDate;
     if (planningMode === 'days') {
         targetDate = new Date(lastSegmentDate);
-        targetDate.setDate(targetDate.getDate() + daysToStay);
+        // Backward: subtract days (we need flights BEFORE the selected date)
+        // Forward: add days (we need flights AFTER the selected date)
+        targetDate.setDate(targetDate.getDate() + (isBackward ? -daysToStay : daysToStay));
     } else {
         const targetDateInput = document.getElementById('target-date');
+        const daysOffset = isBackward ? -daysToStay : daysToStay;
         targetDate = (targetDateInput?.value) 
             ? new Date(targetDateInput.value) 
-            : new Date(lastSegmentDate.getTime() + daysToStay * 24 * 60 * 60 * 1000);
+            : new Date(lastSegmentDate.getTime() + daysOffset * 24 * 60 * 60 * 1000);
     }
     
     return {
@@ -504,22 +508,47 @@ async function loadFlightsFromAirport(origin, date) {
                 const flightDate = new Date(flight.date);
                 flightDate.setHours(0, 0, 0, 0);
                 
-                if (flightDate < lastSegmentDate) return false;
-                if (AppState.endDate) {
-                    const endDateObj = new Date(AppState.endDate);
-                    endDateObj.setHours(0, 0, 0, 0);
-                    if (flightDate > endDateObj) return false;
+                if (direction === 'backward') {
+                    // Backward: flights must be BEFORE the last segment date
+                    // (we need to arrive before the next leg departs)
+                    if (flightDate >= lastSegmentDate) return false;
+                    // Don't show flights before start date
+                    if (AppState.startDate) {
+                        const startDateObj = new Date(AppState.startDate);
+                        startDateObj.setHours(0, 0, 0, 0);
+                        if (flightDate < startDateObj) return false;
+                    }
+                } else {
+                    // Forward: flights must be ON or AFTER the last segment date
+                    if (flightDate < lastSegmentDate) return false;
+                    // Don't show flights after end date
+                    if (AppState.endDate) {
+                        const endDateObj = new Date(AppState.endDate);
+                        endDateObj.setHours(0, 0, 0, 0);
+                        if (flightDate > endDateObj) return false;
+                    }
                 }
                 return true;
             });
-        } else if (AppState.endDate) {
-            const endDateObj = new Date(AppState.endDate);
-            endDateObj.setHours(0, 0, 0, 0);
-            flights = flights.filter(flight => {
-                const flightDate = new Date(flight.date);
-                flightDate.setHours(0, 0, 0, 0);
-                return flightDate <= endDateObj;
-            });
+        } else {
+            // Initial search - apply date boundaries
+            if (direction === 'backward' && AppState.startDate) {
+                const startDateObj = new Date(AppState.startDate);
+                startDateObj.setHours(0, 0, 0, 0);
+                flights = flights.filter(flight => {
+                    const flightDate = new Date(flight.date);
+                    flightDate.setHours(0, 0, 0, 0);
+                    return flightDate >= startDateObj;
+                });
+            } else if (direction === 'forward' && AppState.endDate) {
+                const endDateObj = new Date(AppState.endDate);
+                endDateObj.setHours(0, 0, 0, 0);
+                flights = flights.filter(flight => {
+                    const flightDate = new Date(flight.date);
+                    flightDate.setHours(0, 0, 0, 0);
+                    return flightDate <= endDateObj;
+                });
+            }
         }
         
         // Filter dead-end destinations (batch API call)
@@ -988,17 +1017,21 @@ function undoLast() {
             const lastSeg = AppState.selectedSegments[AppState.selectedSegments.length - 1];
             const planningMode = document.getElementById('planning-mode')?.value || 'days';
             const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
+            const isBackward = AppState.planningDirection === 'backward';
             
             let nextFlightDate = lastSeg.date;
             if (planningMode === 'days') {
                 const currentDate = new Date(lastSeg.date);
-                currentDate.setDate(currentDate.getDate() + daysToStay);
+                // Backward: subtract days, Forward: add days
+                currentDate.setDate(currentDate.getDate() + (isBackward ? -daysToStay : daysToStay));
                 nextFlightDate = currentDate.toISOString().split('T')[0];
             } else {
                 nextFlightDate = document.getElementById('target-date')?.value || nextFlightDate;
             }
             
-            loadFlightsFromAirport(lastSeg.destination, nextFlightDate);
+            // For backward planning, use the origin (where we need to fly FROM)
+            const nextAirport = isBackward ? lastSeg.origin : lastSeg.destination;
+            loadFlightsFromAirport(nextAirport, nextFlightDate);
         } else {
             // Back to start
             const nextFlightSection = document.getElementById('next-flight-section');
@@ -1058,9 +1091,11 @@ function editSegmentDate(segmentIndex) {
     
     if (segmentIndex === AppState.selectedSegments.length - 1) {
         const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
+        const isBackward = AppState.planningDirection === 'backward';
         const nextDate = new Date(newDate);
-        nextDate.setDate(nextDate.getDate() + daysToStay);
-        loadFlightsFromAirport(segment.destination, nextDate.toISOString().split('T')[0]);
+        nextDate.setDate(nextDate.getDate() + (isBackward ? -daysToStay : daysToStay));
+        const nextAirport = isBackward ? segment.origin : segment.destination;
+        loadFlightsFromAirport(nextAirport, nextDate.toISOString().split('T')[0]);
     }
 }
 
@@ -1350,12 +1385,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (AppState.selectedSegments.length > 0 && AppState.currentOrigin) {
             const lastSegment = AppState.selectedSegments[AppState.selectedSegments.length - 1];
             const planningMode = planningModeSelect?.value || 'days';
+            const isBackward = AppState.planningDirection === 'backward';
             
             let nextFlightDate;
             if (planningMode === 'days') {
                 const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
                 const lastDate = new Date(lastSegment.date);
-                lastDate.setDate(lastDate.getDate() + daysToStay);
+                // Backward: subtract days, Forward: add days
+                lastDate.setDate(lastDate.getDate() + (isBackward ? -daysToStay : daysToStay));
                 nextFlightDate = lastDate.toISOString().split('T')[0];
             } else {
                 nextFlightDate = document.getElementById('target-date')?.value;
