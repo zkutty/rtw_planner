@@ -231,7 +231,7 @@ class SeatsAeroPartnerAPI:
         Args:
             destination: Destination airport code
             target_date: Target date in YYYY-MM-DD format
-            date_range: Number of days forward from target date to search
+            date_range: Number of days to search (before and after target date)
             source: Miles program source (e.g., "qantas", "united")
             
         Returns:
@@ -240,9 +240,9 @@ class SeatsAeroPartnerAPI:
         # Use provided source or fall back to instance default
         effective_source = source or self.source
         
-        # Calculate date range - search forward from target date
+        # Calculate date range - search around target date (before and after)
         target = datetime.strptime(target_date, "%Y-%m-%d")
-        start_date = target_date  # Start from the target date
+        start_date = (target - timedelta(days=date_range)).strftime("%Y-%m-%d")
         end_date = (target + timedelta(days=date_range)).strftime("%Y-%m-%d")
         
         # Check cache (include source in cache key)

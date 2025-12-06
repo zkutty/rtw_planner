@@ -455,13 +455,31 @@ async function loadFlightsFromAirport(origin, date) {
         
         if (isAfterSegmentSelection) {
             const lastSegment = AppState.selectedSegments[AppState.selectedSegments.length - 1];
-            searchDate = lastSegment.date;
+            const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
             
-            if (AppState.endDate) {
-                const endDateObj = new Date(AppState.endDate);
-                const searchBaseDate = new Date(searchDate);
-                const daysUntilEnd = Math.ceil((endDateObj - searchBaseDate) / (1000 * 60 * 60 * 24));
-                maxSearchRange = Math.max(Math.min(daysUntilEnd, maxSearchRange), 0);
+            if (direction === 'backward') {
+                // Backward: flights must arrive BEFORE the last segment departs
+                const lastSegmentDate = new Date(lastSegment.date);
+                lastSegmentDate.setDate(lastSegmentDate.getDate() - daysToStay);
+                searchDate = lastSegmentDate.toISOString().split('T')[0];
+                
+                // Limit search range to not go before start date
+                if (AppState.startDate) {
+                    const startDateObj = new Date(AppState.startDate);
+                    const daysSinceStart = Math.ceil((lastSegmentDate - startDateObj) / (1000 * 60 * 60 * 24));
+                    maxSearchRange = Math.max(Math.min(daysSinceStart, maxSearchRange), 0);
+                }
+            } else {
+                // Forward: flights depart AFTER the last segment arrives
+                searchDate = lastSegment.date;
+                
+                // Limit search range to not exceed end date
+                if (AppState.endDate) {
+                    const endDateObj = new Date(AppState.endDate);
+                    const searchBaseDate = new Date(searchDate);
+                    const daysUntilEnd = Math.ceil((endDateObj - searchBaseDate) / (1000 * 60 * 60 * 24));
+                    maxSearchRange = Math.max(Math.min(daysUntilEnd, maxSearchRange), 0);
+                }
             }
         }
         
