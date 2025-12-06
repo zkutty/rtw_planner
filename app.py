@@ -463,16 +463,27 @@ def get_nearby_airports():
 
 @app.route('/api/airport-coords', methods=['GET'])
 def get_airport_coords():
-    """Get coordinates for airports"""
-    if not planner_coords:
-        return jsonify({'error': 'Not initialized'}), 500
+    """Get coordinates for airports using OpenFlights data"""
+    from airport_data import get_airport_info
     
     airports = request.args.getlist('airports')
     coords = {}
     
     for airport in airports:
         airport = airport.upper()
-        if airport in planner_coords.AIRPORT_COORDINATES:
+        info = get_airport_info(airport)
+        
+        if info:
+            coords[airport] = {
+                'lat': info['lat'],
+                'lon': info['lon'],
+                'name': f"{info['city']}, {info['country']}" if info['city'] else info['name'],
+                'city': info['city'],
+                'country': info['country'],
+                'airport_name': info['name']
+            }
+        elif planner_coords and airport in planner_coords.AIRPORT_COORDINATES:
+            # Fallback to hardcoded data
             lat, lon = planner_coords.AIRPORT_COORDINATES[airport]
             coords[airport] = {
                 'lat': lat,
@@ -524,12 +535,20 @@ def validate_trip():
 
 @app.route('/api/airport-names', methods=['GET'])
 def get_airport_names():
-    """Get airport names"""
-    if not planner_coords:
-        return jsonify({'error': 'Not initialized'}), 500
+    """Get airport names using OpenFlights data"""
+    from airport_data import get_airport_name as get_openflights_name
     
     airports = request.args.getlist('airports')
-    names = {a.upper(): planner_coords.get_airport_name(a.upper()) for a in airports}
+    names = {}
+    
+    for a in airports:
+        code = a.upper()
+        name = get_openflights_name(code)
+        # Fallback to hardcoded if OpenFlights returns just the code
+        if name == code and planner_coords:
+            name = planner_coords.get_airport_name(code)
+        names[code] = name
+    
     return jsonify(names)
 
 
