@@ -2067,18 +2067,27 @@ function switchTab(tabName) {
 
 // Initialize table view
 function initTableView() {
+    console.log('Initializing table view...');
+    
     // Load initial flights button
     const loadBtn = document.getElementById('table-load-flights-btn');
     if (loadBtn) {
-        loadBtn.addEventListener('click', async () => {
+        console.log('Found table-load-flights-btn, attaching event listener');
+        loadBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
             console.log('Load Initial Flights button clicked');
-            const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
-            const startDate = document.getElementById('start-date')?.value || '2026-03-27';
-            const direction = document.getElementById('planning-direction')?.value || 'backward';
-            
-            const origin = startingAirports[0].trim().toUpperCase();
-            console.log(`Loading flights for table view: origin=${origin}, date=${startDate}, direction=${direction}`);
-            await loadFlightsForTableView(origin, startDate, direction);
+            try {
+                const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
+                const startDate = document.getElementById('start-date')?.value || '2026-03-27';
+                const direction = document.getElementById('planning-direction')?.value || 'backward';
+                
+                const origin = startingAirports[0].trim().toUpperCase();
+                console.log(`Loading flights for table view: origin=${origin}, date=${startDate}, direction=${direction}`);
+                await loadFlightsForTableView(origin, startDate, direction);
+            } catch (error) {
+                console.error('Error in load button handler:', error);
+                showError('Failed to load flights: ' + error.message);
+            }
         });
     } else {
         console.error('table-load-flights-btn not found!');
@@ -2110,7 +2119,12 @@ function initTableView() {
 
 // Load flights for table view
 async function loadFlightsForTableView(origin, date, direction) {
-    if (TableViewState.loadingFlights) return;
+    console.log('loadFlightsForTableView called', { origin, date, direction });
+    
+    if (TableViewState.loadingFlights) {
+        console.log('Already loading, skipping...');
+        return;
+    }
     
     TableViewState.loadingFlights = true;
     TableViewState.currentOrigin = origin;
@@ -2131,12 +2145,22 @@ async function loadFlightsForTableView(origin, date, direction) {
             ? `destination=${origin}&date=${date}&date_range=${dateRange}&source=${milesProgram}`
             : `origin=${origin}&date=${date}&date_range=${dateRange}&source=${milesProgram}`;
         
-        const response = await fetch(`${endpoint}?${params}`);
+        const url = `${endpoint}?${params}`;
+        console.log('Fetching from:', url);
+        
+        const response = await fetch(url);
+        console.log('Response status:', response.status);
+        
         const data = await response.json();
+        console.log('Response data:', data);
         
         if (data.error) {
             showError(data.error);
             console.error('API error:', data.error);
+            // Don't return here - let finally block reset button state
+            TableViewState.availableFlights = [];
+            TableViewState.filteredFlights = [];
+            updateAvailableFlightsTable();
             return;
         }
         
