@@ -129,17 +129,9 @@ When planning your RTW trip, keep in mind:
 For detailed API documentation, visit:
 - https://developers.seats.aero/reference/getting-started-p
 
-## Optional: Enhanced Airport Data
+## Airport Data
 
-For more accurate airport coordinates and metadata (city, country, etc.), download the OpenFlights airports database:
-
-```bash
-curl -o airports.dat https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat
-```
-
-This file is **not included in the repository** (it's in .gitignore) but will be automatically used if present.
-
-Source: [OpenFlights Airport Database](https://github.com/jpatokal/openflights/blob/master/data/airports.dat)
+This project includes airport coordinate and metadata from the [OpenFlights Airport Database](https://github.com/jpatokal/openflights/blob/master/data/airports.dat), providing accurate coordinates for 6,000+ airports worldwide.
 
 ## Notes
 
