@@ -2281,15 +2281,36 @@ function applyTableFilters() {
         });
     }
     
-    // Text-based date filter - matches any part of the date string
+    // Text-based date filter - matches any part of the date string (optional)
     if (dateFilter) {
         filtered = filtered.filter(flight => {
             const flightDateStr = flight.date || '';
-            // Check if date filter matches the flight date (flexible matching)
-            // Supports formats like: "2026-03", "03-15", "2026-03-15", "03", etc.
-            return flightDateStr.includes(dateFilter) || 
-                   flightDateStr.replace(/-/g, '').includes(dateFilter.replace(/-/g, '')) ||
-                   new Date(flightDateStr).toLocaleDateString().includes(dateFilter);
+            if (!flightDateStr) return false;
+            
+            // Normalize both strings for comparison (remove dashes, spaces)
+            const normalizedFilter = dateFilter.replace(/[-\s]/g, '').toLowerCase();
+            const normalizedDate = flightDateStr.replace(/[-\s]/g, '').toLowerCase();
+            
+            // Check if normalized filter is contained in normalized date
+            // Supports formats like: "2026-03", "03-15", "2026-03-15", "03", "15", "20260315", etc.
+            if (normalizedDate.includes(normalizedFilter)) {
+                return true;
+            }
+            
+            // Also try formatted date strings
+            try {
+                const flightDate = new Date(flightDateStr);
+                const formattedDate = flightDate.toISOString().split('T')[0]; // YYYY-MM-DD
+                const formattedUS = flightDate.toLocaleDateString('en-US'); // M/D/YYYY
+                
+                if (formattedDate.includes(dateFilter) || formattedUS.includes(dateFilter)) {
+                    return true;
+                }
+            } catch (e) {
+                // Invalid date, skip formatted check
+            }
+            
+            return false;
         });
     }
     
