@@ -1018,8 +1018,11 @@ async function displayFlightsOnMap(flights, origin, direction = 'forward', targe
             ${coords[airport].name}<br>
             <strong>Classes:</strong> ${cabinInfo.join(', ')}<br>
             <strong>Flights:</strong> ${airportFlights.length}<br>
-            <button onclick="filterByDestination('${airport}')" style="margin-top: 8px; padding: 4px 8px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">View Flights</button>
-        `);
+            <button onclick="filterByDestination('${airport}'); return false;" style="margin-top: 8px; padding: 4px 8px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">View Flights</button>
+        `, {
+            closeOnClick: false,
+            autoClose: false
+        });
         marker.bindTooltip(coords[airport].name, { permanent: false, direction: 'top', offset: [0, -10] });
         marker.on('click', () => filterByDestination(airport));
         
@@ -1053,17 +1056,92 @@ async function displayFlightsOnMap(flights, origin, direction = 'forward', targe
 function filterByDestination(airport) {
     AppState.filteredDestination = airport;
     
+    // Open sidebar to show filtered flights
+    const sidebar = document.getElementById('flight-sidebar');
+    if (sidebar) sidebar.classList.add('open');
+    
+    // Filter from allFlights (complete dataset) not currentFlights (already filtered)
+    const flightsToFilter = AppState.allFlights && AppState.allFlights.length > 0 
+        ? AppState.allFlights 
+        : AppState.currentFlights;
+    
     // For backward planning, filter by origin (where flights come from)
     // For forward planning, filter by destination (where flights go to)
-    const filtered = AppState.planningDirection === 'backward'
-        ? AppState.currentFlights.filter(f => f.origin === airport)
-        : AppState.currentFlights.filter(f => f.destination === airport);
+    let filtered = AppState.planningDirection === 'backward'
+        ? flightsToFilter.filter(f => f.origin === airport)
+        : flightsToFilter.filter(f => f.destination === airport);
+    
+    // Apply any active sidebar filters on top of the airport filter
+    const continentFilter = document.getElementById('filter-continent')?.value || '';
+    const dateFrom = document.getElementById('filter-date-start')?.value || '';
+    const dateTo = document.getElementById('filter-date-end')?.value || '';
+    const cabinFilter = document.getElementById('filter-class')?.value || '';
+    const stopsFilter = document.getElementById('filter-stops')?.value || '';
+    
+    if (continentFilter || dateFrom || dateTo || cabinFilter || stopsFilter) {
+        filtered = filtered.filter(flight => {
+            const direction = AppState.planningDirection || 'forward';
+            
+            // Continent filter
+            if (continentFilter) {
+                const filterAirport = direction === 'backward' ? flight.origin : flight.destination;
+                const continent = AppState.airportContinents[filterAirport];
+                if (continent !== continentFilter) return false;
+            }
+            
+            // Date range filter
+            if (dateFrom || dateTo) {
+                const flightDate = new Date(flight.date);
+                flightDate.setHours(0, 0, 0, 0);
+                if (dateFrom) {
+                    const fromDate = new Date(dateFrom);
+                    fromDate.setHours(0, 0, 0, 0);
+                    if (flightDate < fromDate) return false;
+                }
+                if (dateTo) {
+                    const toDate = new Date(dateTo);
+                    toDate.setHours(0, 0, 0, 0);
+                    if (flightDate > toDate) return false;
+                }
+            }
+            
+            // Cabin class filter
+            if (cabinFilter) {
+                if (cabinFilter === 'business' && flight.business_miles_int === 0) return false;
+                if (cabinFilter === 'premium' && flight.business_miles_int === 0 && flight.premium_economy_miles_int === 0) return false;
+                if (cabinFilter === 'economy' && flight.economy_miles_int === 0) return false;
+            }
+            
+            // Stops filter
+            if (stopsFilter) {
+                if (stopsFilter === 'direct' && !flight.is_direct) return false;
+                if (stopsFilter === '1-stop' && (flight.is_direct || flight.num_stops !== 1)) return false;
+                if (stopsFilter === '2+stops' && flight.num_stops < 2) return false;
+            }
+            
+            return true;
+        });
+    }
     
     const targetDateRange = calculateTargetDateRange();
-    displayFlights(filtered, AppState.currentOrigin, true, AppState.planningDirection, targetDateRange);
+    AppState.currentFlights = filtered;
     
-    const marker = AppState.flightMarkers.find(m => m._destination === airport);
-    marker?.openPopup();
+    // Update sidebar with filtered flights (don't re-render map - markers are already correct)
+    renderFlightList(filtered, AppState.currentOrigin, AppState.planningDirection, targetDateRange);
+    
+    // Scroll sidebar to top
+    const flightList = document.getElementById('flight-list');
+    if (flightList) {
+        flightList.scrollTop = 0;
+    }
+    
+    // Close the popup after a brief delay to let user see the sidebar
+    setTimeout(() => {
+        const marker = AppState.flightMarkers.find(m => m._destination === airport);
+        if (marker) {
+            marker.closePopup();
+        }
+    }, 100);
 }
 
 function clearDestinationFilter() {
