@@ -242,7 +242,9 @@ def main():
             print("\n📝 Environment Variables:")
             env_vars = client.list_env_vars(rtw_service.get('id'))
             if env_vars:
-                for env_var in env_vars:
+                for item in env_vars:
+                    # Handle nested envVar structure from API
+                    env_var = item.get('envVar', item)
                     key = env_var.get('key', 'N/A')
                     # Don't print sensitive values
                     value = env_var.get('value', '')

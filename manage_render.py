@@ -68,7 +68,9 @@ def main():
                 env_vars = client.list_env_vars(service.get('id'))
                 print(f"\n📝 Environment Variables for {service.get('name')}:\n")
                 if env_vars:
-                    for env_var in env_vars:
+                    for item in env_vars:
+                        # Handle nested envVar structure from API
+                        env_var = item.get('envVar', item)
                         key = env_var.get('key', 'N/A')
                         value = env_var.get('value', '')
                         # Mask long values (likely secrets)
