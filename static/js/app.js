@@ -1518,10 +1518,161 @@ async function updateTripSummary() {
     }
 }
 
+async function copyTripToClipboard() {
+    if (AppState.selectedSegments.length === 0) {
+        showError('No trip segments to copy');
+        return;
+    }
+    
+    let totalDistance = 0;
+    let totalBusinessMiles = 0;
+    let totalPremiumMiles = 0;
+    let totalEconomyMiles = 0;
+    
+    // Get airport names for better formatting
+    const airports = new Set();
+    AppState.selectedSegments.forEach(seg => {
+        airports.add(seg.origin);
+        airports.add(seg.destination);
+    });
+    
+    let airportNames = {};
+    try {
+        const coords = await getAirportCoords([...airports]);
+        airports.forEach(code => {
+            if (coords[code]) {
+                airportNames[code] = coords[code].name || code;
+            } else {
+                airportNames[code] = code;
+            }
+        });
+    } catch (error) {
+        // Fallback to just codes
+        airports.forEach(code => airportNames[code] = code);
+    }
+    
+    // Format date with full details
+    function formatDateLong(dateStr) {
+        const date = new Date(dateStr);
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+        return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear}`;
+    }
+    
+    // Build trip text
+    let tripText = 'ROUND THE WORLD TRIP\n';
+    tripText += '='.repeat(50) + '\n\n';
+    
+    AppState.selectedSegments.forEach((seg, index) => {
+        totalDistance += seg.distance_miles || 0;
+        
+        if (seg.business_miles_int > 0) totalBusinessMiles += seg.business_miles_int;
+        if (seg.premium_economy_miles_int > 0) totalPremiumMiles += seg.premium_economy_miles_int;
+        if (seg.economy_miles_int > 0) totalEconomyMiles += seg.economy_miles_int;
+        
+        const originName = airportNames[seg.origin] || seg.origin;
+        const destName = airportNames[seg.destination] || seg.destination;
+        
+        tripText += `Segment ${seg.segment}: ${seg.origin} → ${seg.destination}\n`;
+        tripText += `  ${originName} → ${destName}\n`;
+        tripText += `  Date: ${seg.date} (${formatDateLong(seg.date)})\n`;
+        tripText += `  Class: ${seg.cabin_class}\n`;
+        
+        if (seg.business_miles_int > 0) {
+            tripText += `  Award Miles: ${seg.business_miles_int.toLocaleString()} (Business)\n`;
+            tripText += `  Airlines: ${seg.business_carriers || 'N/A'}\n`;
+        } else if (seg.premium_economy_miles_int > 0) {
+            tripText += `  Award Miles: ${seg.premium_economy_miles_int.toLocaleString()} (Premium Economy)\n`;
+            tripText += `  Airlines: ${seg.premium_economy_carriers || 'N/A'}\n`;
+        } else if (seg.economy_miles_int > 0) {
+            tripText += `  Award Miles: ${seg.economy_miles_int.toLocaleString()} (Economy)\n`;
+            tripText += `  Airlines: ${seg.economy_carriers || 'N/A'}\n`;
+        } else {
+            tripText += `  Award Miles: N/A\n`;
+            tripText += `  Airlines: ${seg.economy_carriers || seg.premium_economy_carriers || seg.business_carriers || 'N/A'}\n`;
+        }
+        
+        tripText += `  Distance: ${(seg.distance_miles || 0).toFixed(0).toLocaleString()} miles\n`;
+        tripText += `  Direct: ${seg.is_direct ? 'Yes' : 'No'}`;
+        if (!seg.is_direct) {
+            tripText += ` (${seg.num_stops} stop${seg.num_stops !== 1 ? 's' : ''})`;
+        }
+        tripText += '\n';
+        
+        // Calculate days at destination
+        if (index < AppState.selectedSegments.length - 1) {
+            const nextSeg = AppState.selectedSegments[index + 1];
+            const arrivalDate = new Date(seg.date);
+            const departureDate = new Date(nextSeg.date);
+            const daysDiff = Math.round((departureDate - arrivalDate) / (1000 * 60 * 60 * 24));
+            if (daysDiff >= 0) {
+                tripText += `  Days at ${seg.destination}: ${daysDiff} day${daysDiff !== 1 ? 's' : ''}\n`;
+            }
+        }
+        
+        tripText += '\n';
+    });
+    
+    // Add summary
+    tripText += '-'.repeat(50) + '\n';
+    tripText += 'SUMMARY\n';
+    tripText += '-'.repeat(50) + '\n';
+    tripText += `Total Segments: ${AppState.selectedSegments.length}\n`;
+    
+    if (totalBusinessMiles > 0) {
+        tripText += `Total Business Award Miles: ${totalBusinessMiles.toLocaleString()}\n`;
+    }
+    if (totalPremiumMiles > 0) {
+        tripText += `Total Premium Economy Award Miles: ${totalPremiumMiles.toLocaleString()}\n`;
+    }
+    if (totalEconomyMiles > 0) {
+        tripText += `Total Economy Award Miles: ${totalEconomyMiles.toLocaleString()}\n`;
+    }
+    
+    tripText += `Total Distance: ${totalDistance.toFixed(0).toLocaleString()} miles\n`;
+    
+    const remainingMiles = 35000 - totalDistance;
+    if (remainingMiles >= 0) {
+        tripText += `Remaining under 35K limit: ${remainingMiles.toFixed(0).toLocaleString()} miles\n`;
+    } else {
+        tripText += `⚠️  EXCEEDS 35K LIMIT by ${Math.abs(remainingMiles).toFixed(0).toLocaleString()} miles!\n`;
+    }
+    
+    // Calculate total trip duration
+    if (AppState.selectedSegments.length > 1) {
+        const startDate = new Date(AppState.selectedSegments[0].date);
+        const endDate = new Date(AppState.selectedSegments[AppState.selectedSegments.length - 1].date);
+        const totalDays = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24));
+        tripText += `Total Trip Duration: ${totalDays} days\n`;
+    }
+    
+    // Copy to clipboard
+    try {
+        await navigator.clipboard.writeText(tripText);
+        
+        // Show success feedback
+        const copyBtn = document.getElementById('copy-trip-btn');
+        if (copyBtn) {
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = '✓ Copied!';
+            copyBtn.style.background = '#4CAF50';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+                copyBtn.style.background = '';
+            }, 2000);
+        }
+    } catch (error) {
+        console.error('Failed to copy:', error);
+        showError('Failed to copy to clipboard. Please select and copy manually.');
+    }
+}
+
 function updateButtons() {
     const undoBtn = document.getElementById('undo-btn');
     const clearBtn = document.getElementById('clear-btn');
     const validateBtn = document.getElementById('validate-btn');
+    const copyBtn = document.getElementById('copy-trip-btn');
     
     const hasSegments = AppState.selectedSegments.length > 0;
     
@@ -1531,6 +1682,10 @@ function updateButtons() {
     }
     if (clearBtn) clearBtn.disabled = !hasSegments;
     if (validateBtn) validateBtn.disabled = !hasSegments;
+    if (copyBtn) {
+        copyBtn.disabled = !hasSegments;
+        copyBtn.style.opacity = hasSegments ? '1' : '0.5';
+    }
 }
 
 async function validateTrip() {
@@ -1688,6 +1843,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Action buttons
     document.getElementById('undo-btn')?.addEventListener('click', undoLast);
     document.getElementById('clear-btn')?.addEventListener('click', clearAll);
+    document.getElementById('copy-trip-btn')?.addEventListener('click', copyTripToClipboard);
     document.getElementById('validate-btn')?.addEventListener('click', validateTrip);
     
     // Sidebar close
@@ -1736,6 +1892,7 @@ window.expandDateRange = expandDateRange;
 window.showNearbyAirports = showNearbyAirports;
 window.undoLast = undoLast;
 window.clearAll = clearAll;
+window.copyTripToClipboard = copyTripToClipboard;
 window.validateTrip = validateTrip;
 window.filterByDestination = filterByDestination;
 window.clearDestinationFilter = clearDestinationFilter;
