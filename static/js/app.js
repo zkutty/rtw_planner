@@ -2045,22 +2045,18 @@ function switchTab(tabName) {
         updateSelectedFlightsTable();
         
         // If we have segments but no available flights loaded, load from last segment
+        // Table view is always forward-looking
         if (AppState.selectedSegments.length > 0 && TableViewState.availableFlights.length === 0) {
             const lastSegment = AppState.selectedSegments[AppState.selectedSegments.length - 1];
-            const direction = AppState.planningDirection || 'forward';
-            const nextOrigin = direction === 'backward' ? lastSegment.origin : lastSegment.destination;
+            const nextOrigin = lastSegment.destination;
             const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
             const lastDate = new Date(lastSegment.date);
             
             let nextDate = new Date(lastDate);
-            if (direction === 'backward') {
-                nextDate.setDate(nextDate.getDate() - daysToStay);
-            } else {
-                nextDate.setDate(nextDate.getDate() + daysToStay);
-            }
+            nextDate.setDate(nextDate.getDate() + daysToStay);
             
             document.getElementById('table-filter-origin').value = nextOrigin;
-            loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], direction);
+            loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], 'forward');
         }
     }
 }
@@ -2069,7 +2065,7 @@ function switchTab(tabName) {
 function initTableView() {
     console.log('Initializing table view...');
     
-    // Load initial flights button
+    // Load initial flights button - ALWAYS use forward direction for table view
     const loadBtn = document.getElementById('table-load-flights-btn');
     if (loadBtn) {
         console.log('Found table-load-flights-btn, attaching event listener');
@@ -2079,7 +2075,8 @@ function initTableView() {
             try {
                 const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
                 const startDate = document.getElementById('start-date')?.value || '2026-03-27';
-                const direction = document.getElementById('planning-direction')?.value || 'backward';
+                // Table view is ALWAYS forward-looking
+                const direction = 'forward';
                 
                 const origin = startingAirports[0].trim().toUpperCase();
                 console.log(`Loading flights for table view: origin=${origin}, date=${startDate}, direction=${direction}`);
@@ -2105,16 +2102,42 @@ function initTableView() {
     });
     
     // Table filter listeners
-    ['table-filter-origin', 'table-filter-date-start', 'table-filter-date-end', 
+    ['table-filter-origin', 'table-filter-destination', 'table-filter-date-start', 'table-filter-date-end', 
      'table-filter-class', 'table-filter-airline', 'table-filter-continent'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('change', applyTableFilters);
-            if (id.includes('date') || id === 'table-filter-airline' || id === 'table-filter-origin') {
+            if (id.includes('date') || id === 'table-filter-airline' || id === 'table-filter-origin' || id === 'table-filter-destination') {
                 el.addEventListener('input', debounce(applyTableFilters, 300));
             }
         }
     });
+    
+    // Expand/collapse flights table
+    const expandBtn = document.getElementById('expand-flights-table-btn');
+    const tableContainer = document.getElementById('available-flights-table-container');
+    const expandIcon = document.getElementById('expand-flights-icon');
+    const expandText = document.getElementById('expand-flights-text');
+    
+    if (expandBtn && tableContainer) {
+        expandBtn.addEventListener('click', () => {
+            const isExpanded = tableContainer.classList.contains('expanded');
+            
+            if (isExpanded) {
+                // Collapse
+                tableContainer.classList.remove('expanded');
+                tableContainer.style.maxHeight = '400px';
+                expandIcon.textContent = '⬍';
+                expandText.textContent = 'Expand';
+            } else {
+                // Expand to full screen
+                tableContainer.classList.add('expanded');
+                tableContainer.style.maxHeight = 'calc(100vh - 400px)';
+                expandIcon.textContent = '⬌';
+                expandText.textContent = 'Collapse';
+            }
+        });
+    }
 }
 
 // Load flights for table view
@@ -2204,6 +2227,7 @@ function applyTableFilters() {
     let filtered = [...TableViewState.availableFlights];
     
     const origin = document.getElementById('table-filter-origin')?.value?.trim().toUpperCase();
+    const destination = document.getElementById('table-filter-destination')?.value?.trim().toUpperCase();
     const dateStart = document.getElementById('table-filter-date-start')?.value;
     const dateEnd = document.getElementById('table-filter-date-end')?.value;
     const classFilter = document.getElementById('table-filter-class')?.value;
@@ -2211,11 +2235,16 @@ function applyTableFilters() {
     const continentFilter = document.getElementById('table-filter-continent')?.value;
     
     // Origin filter - filters by the origin airport of flights (where they depart from)
-    // For backward planning: filter by origin (where flights come FROM to reach our target)
-    // For forward planning: filter by origin (where flights depart FROM)
     if (origin) {
         filtered = filtered.filter(flight => {
             return flight.origin === origin;
+        });
+    }
+    
+    // Destination filter - filters by the destination airport of flights
+    if (destination) {
+        filtered = filtered.filter(flight => {
+            return flight.destination === destination;
         });
     }
     
@@ -2264,12 +2293,10 @@ function applyTableFilters() {
         });
     }
     
-    // Continent filter
+    // Continent filter - table view is always forward-looking, so filter by destination continent
     if (continentFilter) {
         filtered = filtered.filter(flight => {
-            const direction = AppState.planningDirection || 'forward';
-            const airport = direction === 'backward' ? flight.origin : flight.destination;
-            const continent = AppState.airportContinents[airport];
+            const continent = AppState.airportContinents[flight.destination];
             // If continent data not loaded yet, include the flight (will be filtered when data loads)
             if (!continent) return true;
             return continent === continentFilter;
@@ -2283,6 +2310,7 @@ function applyTableFilters() {
 // Clear table filters
 function clearTableFilters() {
     document.getElementById('table-filter-origin').value = '';
+    document.getElementById('table-filter-destination').value = '';
     document.getElementById('table-filter-date-start').value = '';
     document.getElementById('table-filter-date-end').value = '';
     document.getElementById('table-filter-class').value = '';
@@ -2335,10 +2363,8 @@ function updateAvailableFlightsTable() {
             carriers = flight.economy_carriers || 'N/A';
         }
         
-        const direction = AppState.planningDirection || 'forward';
-        const route = direction === 'backward' 
-            ? `${flight.origin} → ${flight.destination}` 
-            : `${flight.origin} → ${flight.destination}`;
+        // Table view is always forward-looking, so always show origin → destination
+        const route = `${flight.origin} → ${flight.destination}`;
         
         return `
             <tr>
@@ -2389,21 +2415,17 @@ async function selectFlightFromTable(index) {
     // Update selected flights table
     updateSelectedFlightsTable();
     
-    // Auto-load next flights from destination
-    const nextOrigin = direction === 'backward' ? flight.origin : flight.destination;
+    // Auto-load next flights from destination - table view is always forward-looking
+    const nextOrigin = flight.destination;
     const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
     const flightDate = new Date(flight.date);
     
     let nextDate = new Date(flightDate);
-    if (direction === 'backward') {
-        nextDate.setDate(nextDate.getDate() - daysToStay);
-    } else {
-        nextDate.setDate(nextDate.getDate() + daysToStay);
-    }
+    nextDate.setDate(nextDate.getDate() + daysToStay);
     
-    // Update origin filter and load next flights
+    // Update origin filter and load next flights (always forward)
     document.getElementById('table-filter-origin').value = nextOrigin;
-    await loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], direction);
+    await loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], 'forward');
 }
 
 // Update selected flights table
@@ -2511,23 +2533,18 @@ function removeFlightFromTable(segmentIndex) {
     updateButtons();
     redrawSelectedRoutes();
     
-    // Reload flights from the last remaining segment's destination
+    // Reload flights from the last remaining segment's destination - table view is always forward
     if (AppState.selectedSegments.length > 0) {
         const lastSegment = AppState.selectedSegments[AppState.selectedSegments.length - 1];
-        const direction = AppState.planningDirection || 'forward';
-        const nextOrigin = direction === 'backward' ? lastSegment.origin : lastSegment.destination;
+        const nextOrigin = lastSegment.destination;
         const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
         const lastDate = new Date(lastSegment.date);
         
         let nextDate = new Date(lastDate);
-        if (direction === 'backward') {
-            nextDate.setDate(nextDate.getDate() - daysToStay);
-        } else {
-            nextDate.setDate(nextDate.getDate() + daysToStay);
-        }
+        nextDate.setDate(nextDate.getDate() + daysToStay);
         
         document.getElementById('table-filter-origin').value = nextOrigin;
-        loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], direction);
+        loadFlightsForTableView(nextOrigin, nextDate.toISOString().split('T')[0], 'forward');
     } else {
         // Clear available flights if no segments remain
         TableViewState.availableFlights = [];

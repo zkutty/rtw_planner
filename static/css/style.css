@@ -1304,3 +1304,30 @@ header h1 {
 .flights-table .btn-remove:hover {
     background: #d32f2f;
 }
+
+/* Expanded table container */
+.table-container.expanded {
+    max-height: calc(100vh - 300px) !important;
+    position: relative;
+}
+
+.table-container.expanded table {
+    width: 100%;
+}
+
+/* Expanded table container */
+.table-container.expanded {
+    max-height: calc(100vh - 400px) !important;
+    position: relative;
+}
+
+.table-container.expanded table {
+    width: 100%;
+}
+
+/* Table section with expand button */
+.table-section h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
