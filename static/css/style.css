@@ -1317,12 +1317,22 @@ header h1 {
 
 /* Expanded table container */
 .table-container.expanded {
-    max-height: calc(100vh - 400px) !important;
+    max-height: calc(100vh - 300px) !important;
     position: relative;
 }
 
 .table-container.expanded table {
     width: 100%;
+}
+
+/* Ensure expand button works */
+#expand-flights-table-btn {
+    cursor: pointer;
+    user-select: none;
+}
+
+#expand-flights-table-btn:hover {
+    background: var(--color-primary-hover);
 }
 
 /* Table section with expand button */

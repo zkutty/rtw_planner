@@ -2073,12 +2073,14 @@ function initTableView() {
             e.preventDefault();
             console.log('Load Initial Flights button clicked');
             try {
-                const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
-                const startDate = document.getElementById('start-date')?.value || '2026-03-27';
+                // Use pre-seeded values from filters (which are set from map page defaults)
+                const origin = document.getElementById('table-filter-origin')?.value?.trim().toUpperCase() || 
+                              (document.getElementById('starting-airports')?.value?.split(',')[0]?.trim().toUpperCase() || 'JFK');
+                const startDate = document.getElementById('table-filter-date-start')?.value || 
+                                 document.getElementById('start-date')?.value || '2026-03-27';
                 // Table view is ALWAYS forward-looking
                 const direction = 'forward';
                 
-                const origin = startingAirports[0].trim().toUpperCase();
                 console.log(`Loading flights for table view: origin=${origin}, date=${startDate}, direction=${direction}`);
                 await loadFlightsForTableView(origin, startDate, direction);
             } catch (error) {
@@ -2102,12 +2104,34 @@ function initTableView() {
     });
     
     // Table filter listeners
-    ['table-filter-origin', 'table-filter-destination', 'table-filter-date-start', 'table-filter-date-end', 
+    // Origin filter triggers new API call (independent search)
+    const originFilterEl = document.getElementById('table-filter-origin');
+    if (originFilterEl) {
+        originFilterEl.addEventListener('change', async () => {
+            const origin = originFilterEl.value.trim().toUpperCase();
+            if (origin && origin.length >= 3) {
+                const dateStart = document.getElementById('table-filter-date-start')?.value || document.getElementById('start-date')?.value || '2026-03-27';
+                console.log('Origin filter changed, loading flights from:', origin);
+                await loadFlightsForTableView(origin, dateStart, 'forward');
+            }
+        });
+        originFilterEl.addEventListener('input', debounce(async () => {
+            const origin = originFilterEl.value.trim().toUpperCase();
+            if (origin && origin.length >= 3) {
+                const dateStart = document.getElementById('table-filter-date-start')?.value || document.getElementById('start-date')?.value || '2026-03-27';
+                console.log('Origin filter input, loading flights from:', origin);
+                await loadFlightsForTableView(origin, dateStart, 'forward');
+            }
+        }, 800)); // Longer delay for API calls
+    }
+    
+    // Other filters just filter existing data (no API calls)
+    ['table-filter-destination', 'table-filter-date-start', 'table-filter-date-end', 
      'table-filter-class', 'table-filter-airline', 'table-filter-continent'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('change', applyTableFilters);
-            if (id.includes('date') || id === 'table-filter-airline' || id === 'table-filter-origin' || id === 'table-filter-destination') {
+            if (id.includes('date') || id === 'table-filter-airline' || id === 'table-filter-destination') {
                 el.addEventListener('input', debounce(applyTableFilters, 300));
             }
         }
@@ -2119,25 +2143,44 @@ function initTableView() {
     const expandIcon = document.getElementById('expand-flights-icon');
     const expandText = document.getElementById('expand-flights-text');
     
-    if (expandBtn && tableContainer) {
-        expandBtn.addEventListener('click', () => {
+    if (expandBtn && tableContainer && expandIcon && expandText) {
+        console.log('Setting up expand button');
+        expandBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Expand button clicked');
             const isExpanded = tableContainer.classList.contains('expanded');
             
             if (isExpanded) {
                 // Collapse
                 tableContainer.classList.remove('expanded');
                 tableContainer.style.maxHeight = '400px';
-                expandIcon.textContent = '⬍';
-                expandText.textContent = 'Expand';
+                if (expandIcon) expandIcon.textContent = '⬍';
+                if (expandText) expandText.textContent = 'Expand';
             } else {
                 // Expand to full screen
                 tableContainer.classList.add('expanded');
-                tableContainer.style.maxHeight = 'calc(100vh - 400px)';
-                expandIcon.textContent = '⬌';
-                expandText.textContent = 'Collapse';
+                tableContainer.style.maxHeight = 'calc(100vh - 300px)';
+                if (expandIcon) expandIcon.textContent = '⬌';
+                if (expandText) expandText.textContent = 'Collapse';
             }
         });
+    } else {
+        console.error('Expand button elements not found:', { expandBtn, tableContainer, expandIcon, expandText });
     }
+    
+    // Pre-seed filters with default values from map page
+    const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
+    const startDate = document.getElementById('start-date')?.value || '2026-03-27';
+    const endDate = document.getElementById('end-date')?.value || '2026-04-25';
+    
+    const originFilter = document.getElementById('table-filter-origin');
+    const dateStartFilter = document.getElementById('table-filter-date-start');
+    const dateEndFilter = document.getElementById('table-filter-date-end');
+    
+    if (originFilter) originFilter.value = startingAirports[0].trim().toUpperCase();
+    if (dateStartFilter) dateStartFilter.value = startDate;
+    if (dateEndFilter) dateEndFilter.value = endDate;
 }
 
 // Load flights for table view
@@ -2201,10 +2244,7 @@ async function loadFlightsForTableView(origin, date, direction) {
         TableViewState.availableFlights = flights;
         TableViewState.filteredFlights = flights;
         
-        // Clear origin filter when loading new flights (so all flights show initially)
-        const originFilter = document.getElementById('table-filter-origin');
-        if (originFilter) originFilter.value = '';
-        
+        // Don't clear origin filter - keep it set to the origin we just loaded
         // Update available flights table
         updateAvailableFlightsTable();
         

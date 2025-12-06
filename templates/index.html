@@ -356,56 +356,6 @@
                     </div>
                 </div>
 
-                <!-- Table Filters -->
-                <div class="table-filters">
-                    <div class="filter-row">
-                        <div class="filter-item">
-                            <label>Origin:</label>
-                            <input type="text" id="table-filter-origin" placeholder="From (e.g., JFK)" style="width: 120px; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
-                        </div>
-                        <div class="filter-item">
-                            <label>Destination:</label>
-                            <input type="text" id="table-filter-destination" placeholder="To (e.g., LHR)" style="width: 120px; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
-                        </div>
-                        <div class="filter-item">
-                            <label>Depart Date:</label>
-                            <input type="date" id="table-filter-date-start" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
-                        </div>
-                        <div class="filter-item">
-                            <label>To:</label>
-                            <input type="date" id="table-filter-date-end" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
-                        </div>
-                        <div class="filter-item">
-                            <label>Class:</label>
-                            <select id="table-filter-class" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
-                                <option value="">All</option>
-                                <option value="business">Business</option>
-                                <option value="premium">Premium Economy</option>
-                                <option value="economy">Economy</option>
-                            </select>
-                        </div>
-                        <div class="filter-item">
-                            <label>Airline:</label>
-                            <input type="text" id="table-filter-airline" placeholder="e.g., Qantas, BA" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
-                        </div>
-                        <div class="filter-item">
-                            <label>Continent:</label>
-                            <select id="table-filter-continent" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
-                                <option value="">All</option>
-                                <option value="North America">North America</option>
-                                <option value="South America">South America</option>
-                                <option value="Europe">Europe</option>
-                                <option value="Asia">Asia</option>
-                                <option value="Oceania">Oceania</option>
-                                <option value="Africa">Africa</option>
-                            </select>
-                        </div>
-                        <div class="filter-item">
-                            <button onclick="clearTableFilters()" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.85rem;">Clear All</button>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Selected Flights Table -->
                 <div class="table-section">
                     <h4>Selected Flights</h4>
@@ -442,6 +392,57 @@
                             <span id="expand-flights-icon">⬍</span> <span id="expand-flights-text">Expand</span>
                         </button>
                     </div>
+                    
+                    <!-- Filters for Available Flights Table -->
+                    <div class="table-filters" style="margin-bottom: 0.75rem; padding: 0.75rem; background: #f9f9f9; border-radius: 4px;">
+                        <div class="filter-row">
+                            <div class="filter-item">
+                                <label>Origin:</label>
+                                <input type="text" id="table-filter-origin" placeholder="From (e.g., JFK)" style="width: 120px; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <div class="filter-item">
+                                <label>Destination:</label>
+                                <input type="text" id="table-filter-destination" placeholder="To (e.g., LHR)" style="width: 120px; padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <div class="filter-item">
+                                <label>Depart Date:</label>
+                                <input type="date" id="table-filter-date-start" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <div class="filter-item">
+                                <label>To:</label>
+                                <input type="date" id="table-filter-date-end" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
+                            <div class="filter-item">
+                                <label>Class:</label>
+                                <select id="table-filter-class" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                                    <option value="">All</option>
+                                    <option value="business">Business</option>
+                                    <option value="premium">Premium Economy</option>
+                                    <option value="economy">Economy</option>
+                                </select>
+                            </div>
+                            <div class="filter-item">
+                                <label>Airline:</label>
+                                <input type="text" id="table-filter-airline" placeholder="e.g., Qantas, BA" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+                            </div>
+                            <div class="filter-item">
+                                <label>Continent:</label>
+                                <select id="table-filter-continent" style="padding: 0.4rem; border: 1px solid #ddd; border-radius: 4px;">
+                                    <option value="">All</option>
+                                    <option value="North America">North America</option>
+                                    <option value="South America">South America</option>
+                                    <option value="Europe">Europe</option>
+                                    <option value="Asia">Asia</option>
+                                    <option value="Oceania">Oceania</option>
+                                    <option value="Africa">Africa</option>
+                                </select>
+                            </div>
+                            <div class="filter-item">
+                                <button onclick="clearTableFilters()" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.85rem;">Clear Filters</button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="table-container" id="available-flights-table-container" style="max-height: 400px; overflow-y: auto; transition: max-height 0.3s ease;">
                         <table id="available-flights-table" class="flights-table">
                             <thead>
