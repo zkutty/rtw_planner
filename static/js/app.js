@@ -2076,8 +2076,7 @@ function initTableView() {
                 // Use pre-seeded values from filters (which are set from map page defaults)
                 const origin = document.getElementById('table-filter-origin')?.value?.trim().toUpperCase() || 
                               (document.getElementById('starting-airports')?.value?.split(',')[0]?.trim().toUpperCase() || 'JFK');
-                const startDate = document.getElementById('table-filter-date-start')?.value || 
-                                 document.getElementById('start-date')?.value || '2026-03-27';
+                const startDate = document.getElementById('start-date')?.value || '2026-03-27';
                 // Table view is ALWAYS forward-looking
                 const direction = 'forward';
                 
@@ -2110,28 +2109,28 @@ function initTableView() {
         originFilterEl.addEventListener('change', async () => {
             const origin = originFilterEl.value.trim().toUpperCase();
             if (origin && origin.length >= 3) {
-                const dateStart = document.getElementById('table-filter-date-start')?.value || document.getElementById('start-date')?.value || '2026-03-27';
+                const startDate = document.getElementById('start-date')?.value || '2026-03-27';
                 console.log('Origin filter changed, loading flights from:', origin);
-                await loadFlightsForTableView(origin, dateStart, 'forward');
+                await loadFlightsForTableView(origin, startDate, 'forward');
             }
         });
         originFilterEl.addEventListener('input', debounce(async () => {
             const origin = originFilterEl.value.trim().toUpperCase();
             if (origin && origin.length >= 3) {
-                const dateStart = document.getElementById('table-filter-date-start')?.value || document.getElementById('start-date')?.value || '2026-03-27';
+                const startDate = document.getElementById('start-date')?.value || '2026-03-27';
                 console.log('Origin filter input, loading flights from:', origin);
-                await loadFlightsForTableView(origin, dateStart, 'forward');
+                await loadFlightsForTableView(origin, startDate, 'forward');
             }
         }, 800)); // Longer delay for API calls
     }
     
     // Other filters just filter existing data (no API calls)
-    ['table-filter-destination', 'table-filter-date-start', 'table-filter-date-end', 
+    ['table-filter-destination', 'table-filter-date', 
      'table-filter-class', 'table-filter-airline', 'table-filter-continent'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('change', applyTableFilters);
-            if (id.includes('date') || id === 'table-filter-airline' || id === 'table-filter-destination') {
+            if (id === 'table-filter-date' || id === 'table-filter-airline' || id === 'table-filter-destination') {
                 el.addEventListener('input', debounce(applyTableFilters, 300));
             }
         }
@@ -2171,16 +2170,11 @@ function initTableView() {
     
     // Pre-seed filters with default values from map page
     const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
-    const startDate = document.getElementById('start-date')?.value || '2026-03-27';
-    const endDate = document.getElementById('end-date')?.value || '2026-04-25';
     
     const originFilter = document.getElementById('table-filter-origin');
-    const dateStartFilter = document.getElementById('table-filter-date-start');
-    const dateEndFilter = document.getElementById('table-filter-date-end');
     
     if (originFilter) originFilter.value = startingAirports[0].trim().toUpperCase();
-    if (dateStartFilter) dateStartFilter.value = startDate;
-    if (dateEndFilter) dateEndFilter.value = endDate;
+    // Date filter is optional - leave empty by default
 }
 
 // Load flights for table view
@@ -2268,8 +2262,7 @@ function applyTableFilters() {
     
     const origin = document.getElementById('table-filter-origin')?.value?.trim().toUpperCase();
     const destination = document.getElementById('table-filter-destination')?.value?.trim().toUpperCase();
-    const dateStart = document.getElementById('table-filter-date-start')?.value;
-    const dateEnd = document.getElementById('table-filter-date-end')?.value;
+    const dateFilter = document.getElementById('table-filter-date')?.value?.trim();
     const classFilter = document.getElementById('table-filter-class')?.value;
     const airlineFilter = document.getElementById('table-filter-airline')?.value?.toLowerCase();
     const continentFilter = document.getElementById('table-filter-continent')?.value;
@@ -2288,25 +2281,15 @@ function applyTableFilters() {
         });
     }
     
-    // Date range filter
-    if (dateStart || dateEnd) {
+    // Text-based date filter - matches any part of the date string
+    if (dateFilter) {
         filtered = filtered.filter(flight => {
-            const flightDate = new Date(flight.date);
-            flightDate.setHours(0, 0, 0, 0);
-            
-            if (dateStart) {
-                const start = new Date(dateStart);
-                start.setHours(0, 0, 0, 0);
-                if (flightDate < start) return false;
-            }
-            
-            if (dateEnd) {
-                const end = new Date(dateEnd);
-                end.setHours(0, 0, 0, 0);
-                if (flightDate > end) return false;
-            }
-            
-            return true;
+            const flightDateStr = flight.date || '';
+            // Check if date filter matches the flight date (flexible matching)
+            // Supports formats like: "2026-03", "03-15", "2026-03-15", "03", etc.
+            return flightDateStr.includes(dateFilter) || 
+                   flightDateStr.replace(/-/g, '').includes(dateFilter.replace(/-/g, '')) ||
+                   new Date(flightDateStr).toLocaleDateString().includes(dateFilter);
         });
     }
     
@@ -2351,8 +2334,7 @@ function applyTableFilters() {
 function clearTableFilters() {
     document.getElementById('table-filter-origin').value = '';
     document.getElementById('table-filter-destination').value = '';
-    document.getElementById('table-filter-date-start').value = '';
-    document.getElementById('table-filter-date-end').value = '';
+    document.getElementById('table-filter-date').value = '';
     document.getElementById('table-filter-class').value = '';
     document.getElementById('table-filter-airline').value = '';
     document.getElementById('table-filter-continent').value = '';
