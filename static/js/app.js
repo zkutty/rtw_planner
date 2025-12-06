@@ -2068,14 +2068,21 @@ function switchTab(tabName) {
 // Initialize table view
 function initTableView() {
     // Load initial flights button
-    document.getElementById('table-load-flights-btn')?.addEventListener('click', () => {
-        const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
-        const startDate = document.getElementById('start-date')?.value || '2026-03-27';
-        const direction = document.getElementById('planning-direction')?.value || 'backward';
-        
-        const origin = startingAirports[0].trim().toUpperCase();
-        loadFlightsForTableView(origin, startDate, direction);
-    });
+    const loadBtn = document.getElementById('table-load-flights-btn');
+    if (loadBtn) {
+        loadBtn.addEventListener('click', async () => {
+            console.log('Load Initial Flights button clicked');
+            const startingAirports = document.getElementById('starting-airports')?.value?.split(',') || ['JFK'];
+            const startDate = document.getElementById('start-date')?.value || '2026-03-27';
+            const direction = document.getElementById('planning-direction')?.value || 'backward';
+            
+            const origin = startingAirports[0].trim().toUpperCase();
+            console.log(`Loading flights for table view: origin=${origin}, date=${startDate}, direction=${direction}`);
+            await loadFlightsForTableView(origin, startDate, direction);
+        });
+    } else {
+        console.error('table-load-flights-btn not found!');
+    }
     
     // Table clear all button
     document.getElementById('table-clear-all-btn')?.addEventListener('click', () => {
@@ -2129,13 +2136,16 @@ async function loadFlightsForTableView(origin, date, direction) {
         
         if (data.error) {
             showError(data.error);
+            console.error('API error:', data.error);
             return;
         }
         
         let flights = data.flights || [];
+        console.log(`Received ${flights.length} flights from API`);
         
         // Filter OneWorld flights
         flights = filterOneWorldFlights(flights);
+        console.log(`After OneWorld filter: ${flights.length} flights`);
         
         // Load continent data for filtering
         await loadContinentData(flights, direction);
@@ -2144,12 +2154,14 @@ async function loadFlightsForTableView(origin, date, direction) {
         TableViewState.availableFlights = flights;
         TableViewState.filteredFlights = flights;
         
-        // Apply existing filters
-        applyTableFilters();
-        
-        // Update origin filter to show current origin
+        // Clear origin filter when loading new flights (so all flights show initially)
         const originFilter = document.getElementById('table-filter-origin');
-        if (originFilter) originFilter.value = origin;
+        if (originFilter) originFilter.value = '';
+        
+        // Update available flights table
+        updateAvailableFlightsTable();
+        
+        console.log(`Table view: Loaded ${flights.length} flights from ${origin} on ${date}`);
         
     } catch (error) {
         console.error('Error loading flights:', error);
@@ -2174,12 +2186,12 @@ function applyTableFilters() {
     const airlineFilter = document.getElementById('table-filter-airline')?.value?.toLowerCase();
     const continentFilter = document.getElementById('table-filter-continent')?.value;
     
-    // Origin filter
+    // Origin filter - filters by the origin airport of flights (where they depart from)
+    // For backward planning: filter by origin (where flights come FROM to reach our target)
+    // For forward planning: filter by origin (where flights depart FROM)
     if (origin) {
-        const direction = AppState.planningDirection || 'forward';
         filtered = filtered.filter(flight => {
-            const airport = direction === 'backward' ? flight.origin : flight.destination;
-            return airport === origin;
+            return flight.origin === origin;
         });
     }
     
@@ -2262,9 +2274,13 @@ function updateAvailableFlightsTable() {
     const tbody = document.getElementById('available-flights-tbody');
     const countSpan = document.getElementById('table-flights-count');
     
-    if (!tbody) return;
+    if (!tbody) {
+        console.error('available-flights-tbody not found!');
+        return;
+    }
     
     const flights = TableViewState.filteredFlights || [];
+    console.log(`Updating available flights table with ${flights.length} flights`);
     
     if (countSpan) {
         countSpan.textContent = `(${flights.length} flight${flights.length !== 1 ? 's' : ''})`;
