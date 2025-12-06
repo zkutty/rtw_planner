@@ -1315,16 +1315,6 @@ header h1 {
     width: 100%;
 }
 
-/* Expanded table container */
-.table-container.expanded {
-    max-height: calc(100vh - 300px) !important;
-    position: relative;
-}
-
-.table-container.expanded table {
-    width: 100%;
-}
-
 /* Ensure expand button works */
 #expand-flights-table-btn {
     cursor: pointer;
