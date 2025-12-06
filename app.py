@@ -410,6 +410,8 @@ def get_flights_to():
     date_range = int(request.args.get('date_range', 2))
     cabin_class = request.args.get('cabin_class', None)
     miles_program = request.args.get('source', 'qantas')  # Miles program source
+    start_date = request.args.get('start_date', None)  # Trip start date for connectivity check
+    days_to_stay = int(request.args.get('days_to_stay', 3))  # Days at origin before this flight
     
     if not destination or not target_date:
         return jsonify({'error': 'Destination and date required'}), 400
@@ -417,7 +419,18 @@ def get_flights_to():
     try:
         # Pass source to API if using the API, otherwise ignore for database
         if _using_api:
-            flights = data_source.get_flights_to_destination(destination, target_date, date_range, source=miles_program)
+            # Use connectivity-aware search if start_date is provided (backward planning)
+            if start_date:
+                flights = data_source.get_flights_to_destination_with_connectivity(
+                    destination=destination,
+                    target_date=target_date,
+                    date_range=date_range,
+                    source=miles_program,
+                    days_to_stay=days_to_stay,
+                    start_date=start_date
+                )
+            else:
+                flights = data_source.get_flights_to_destination(destination, target_date, date_range, source=miles_program)
         else:
             flights = data_source.get_flights_to_destination(destination, target_date, date_range)
         

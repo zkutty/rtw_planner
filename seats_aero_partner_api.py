@@ -459,6 +459,108 @@ class SeatsAeroPartnerAPI:
             print(f"Error fetching airports with outbound flights: {e}")
             return set()
     
+    def get_airports_with_inbound_flights(
+        self,
+        start_date: str,
+        end_date: str,
+        source: Optional[str] = None
+    ) -> Set[str]:
+        """
+        Get all airports that have inbound flights in a date range.
+        Used for backward planning - validate that an origin has flights coming to it.
+        
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+            source: Miles program source
+            
+        Returns:
+            Set of airport codes that have inbound flights
+        """
+        effective_source = source or self.source
+        cache_key = self._get_cache_key("inbound_airports", start_date, end_date, effective_source)
+        
+        if self._is_cache_valid(cache_key):
+            return self._cache[cache_key]
+        
+        try:
+            # Fetch availability to get destination airports
+            availability = self.get_all_availability(
+                start_date=start_date,
+                end_date=end_date,
+                max_results=2000,
+                source=effective_source
+            )
+            
+            # Extract unique destination airports
+            airports = set()
+            for record in availability:
+                route = record.get("Route", {})
+                dest = route.get("DestinationAirport")
+                if dest:
+                    airports.add(dest)
+            
+            self._set_cache(cache_key, airports)
+            return airports
+        except Exception as e:
+            print(f"Error fetching airports with inbound flights: {e}")
+            return set()
+    
+    def get_flights_to_destination_with_connectivity(
+        self,
+        destination: str,
+        target_date: str,
+        date_range: int = 2,
+        source: Optional[str] = None,
+        days_to_stay: int = 3,
+        start_date: Optional[str] = None
+    ) -> List[Dict]:
+        """
+        Get flights TO a destination, but only from origins that have inbound flights.
+        This prevents showing "dead end" origins in backward planning.
+        
+        Args:
+            destination: Destination airport code
+            target_date: Target date in YYYY-MM-DD format
+            date_range: Number of days back from target date to search
+            source: Miles program source
+            days_to_stay: Days staying at origin before this flight
+            start_date: Trip start date - origins must have flights after this
+            
+        Returns:
+            List of flight dictionaries, filtered to only viable origins
+        """
+        # First, get all flights to destination
+        flights = self.get_flights_to_destination(destination, target_date, date_range, source)
+        
+        if not flights or not start_date:
+            return flights
+        
+        effective_source = source or self.source
+        
+        # For backward planning, we need origins that have flights TO them
+        # from dates between start_date and the earliest flight date - days_to_stay
+        latest_flight_date = max(f['date'] for f in flights) if flights else target_date
+        inbound_end = (datetime.strptime(latest_flight_date, "%Y-%m-%d") - timedelta(days=days_to_stay)).strftime("%Y-%m-%d")
+        
+        # Get airports with inbound availability
+        airports_with_inbound = self.get_airports_with_inbound_flights(
+            start_date=start_date,
+            end_date=inbound_end,
+            source=effective_source
+        )
+        
+        if not airports_with_inbound:
+            return flights
+        
+        # Filter to only origins with inbound connectivity
+        filtered_flights = [
+            f for f in flights 
+            if f['origin'] in airports_with_inbound
+        ]
+        
+        return filtered_flights
+    
     def get_flights_from_origin_with_connectivity(
         self,
         origin: str,
