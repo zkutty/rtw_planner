@@ -165,6 +165,29 @@ def build_database(csv_file: str, db_file: str = 'flights.db'):
 
 
 if __name__ == '__main__':
+    db_file = os.environ.get('DB_FILE', 'flights.db')
+    
+    # Check if database already exists - if so, skip building to save build time
+    if os.path.exists(db_file):
+        db_size = os.path.getsize(db_file) / (1024 * 1024)
+        print(f"✓ Database already exists: {db_file} ({db_size:.1f} MB)")
+        print("  Skipping database build (using existing database)")
+        # Verify database has data
+        try:
+            import sqlite3
+            conn = sqlite3.connect(db_file)
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM flights')
+            count = cursor.fetchone()[0]
+            conn.close()
+            if count > 0:
+                print(f"  Database contains {count:,} flights - ready to use!")
+                sys.exit(0)
+            else:
+                print("  Warning: Database exists but is empty, will rebuild...")
+        except Exception as e:
+            print(f"  Warning: Could not verify database ({e}), will rebuild...")
+    
     # Find CSV file
     csv_candidates = [
         os.environ.get('CSV_FILE', ''),
@@ -180,12 +203,32 @@ if __name__ == '__main__':
             break
     
     if not csv_file:
-        print("No CSV file found!")
-        sys.exit(1)
+        print("⚠️  Warning: No CSV file found!")
+        if os.path.exists(db_file):
+            print(f"  Using existing database: {db_file}")
+            sys.exit(0)
+        else:
+            print("❌ Error: No CSV file and no existing database found!")
+            print("  Cannot proceed without data source.")
+            sys.exit(1)
     
-    if build_database(csv_file):
-        print("\n✓ Database ready for deployment!")
-    else:
+    try:
+        if build_database(csv_file, db_file):
+            print("\n✓ Database ready for deployment!")
+        else:
+            print("\n❌ Database build failed!")
+            if os.path.exists(db_file):
+                print(f"  Attempting to use existing database: {db_file}")
+                sys.exit(0)
+            sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ Error building database: {e}")
+        import traceback
+        traceback.print_exc()
+        if os.path.exists(db_file):
+            print(f"\n⚠️  Warning: Build failed, but existing database found: {db_file}")
+            print("  Continuing with existing database...")
+            sys.exit(0)
         sys.exit(1)
 
 
