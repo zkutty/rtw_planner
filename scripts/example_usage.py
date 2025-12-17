@@ -2,7 +2,7 @@
 """
 Example usage of the Seats.aero API client for individual route searches
 """
-from seats_aero_client import SeatsAeroClient
+from lib.seats_aero_client import SeatsAeroClient
 import json
 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to add missing airport coordinates using airportsdata library
+Script to update interactive_rtw_planner.py with missing airport coordinates
 """
 import os
 import airportsdata
@@ -19,7 +19,7 @@ def main():
         print(f"CSV file not found: {csv_file}")
         return
     
-    from interactive_rtw_planner import InteractiveRTWPlanner
+    from lib.interactive_rtw_planner import InteractiveRTWPlanner
     
     planner = InteractiveRTWPlanner(csv_file)
     all_airports = planner.get_all_airports()
@@ -29,32 +29,26 @@ def main():
     print(f"Found {len(missing_coords)} airports missing coordinates")
     print("Fetching coordinates...")
     
-    found = 0
-    not_found = []
-    
-    coords_dict = {}
+    new_coords = {}
     for code in missing_coords:
         coords = get_airport_coords(code)
         if coords:
-            coords_dict[code] = coords
-            found += 1
-            if found % 50 == 0:
-                print(f"  Found {found} coordinates so far...")
-        else:
-            not_found.append(code)
+            new_coords[code] = coords
     
-    print(f"\n✓ Found coordinates for {found} airports")
-    print(f"✗ Could not find coordinates for {len(not_found)} airports")
+    print(f"✓ Found coordinates for {len(new_coords)} airports")
     
-    if not_found:
-        print(f"\nMissing airports: {', '.join(not_found[:20])}{'...' if len(not_found) > 20 else ''}")
+    # Read the file
+    with open('lib/interactive_rtw_planner.py', 'r') as f:
+        content = f.read()
     
-    # Generate Python code to add to AIRPORT_COORDINATES
-    print("\n" + "="*80)
-    print("Add this to AIRPORT_COORDINATES in interactive_rtw_planner.py:")
-    print("="*80)
+    # Find the end of AIRPORT_COORDINATES dictionary
+    start_marker = "        'TYS': (35.8110, -83.9940), 'SMF': (38.6954, -121.5908)\n    }"
     
-    # Group by region for better organization
+    if start_marker not in content:
+        print("Could not find insertion point in file")
+        return
+    
+    # Group new coordinates by region
     regions = {
         'North America': [],
         'Europe': [],
@@ -66,8 +60,7 @@ def main():
         'Others': []
     }
     
-    # Simple region detection based on coordinates
-    for code, (lat, lon) in sorted(coords_dict.items()):
+    for code, (lat, lon) in sorted(new_coords.items()):
         if -50 <= lat <= 70 and -180 <= lon <= -50:  # North America
             regions['North America'].append((code, lat, lon))
         elif 35 <= lat <= 70 and -10 <= lon <= 40:  # Europe
@@ -85,16 +78,29 @@ def main():
         else:
             regions['Others'].append((code, lat, lon))
     
+    # Build the insertion text
+    insert_text = ""
     for region, airports in regions.items():
         if airports:
-            print(f"\n        # {region}")
+            insert_text += f"\n        # {region}\n"
             for code, lat, lon in sorted(airports):
-                print(f"        '{code}': ({lat}, {lon}),")
+                insert_text += f"        '{code}': ({lat}, {lon}),\n"
     
-    print("\n" + "="*80)
+    # Insert before the closing brace
+    new_content = content.replace(
+        start_marker,
+        start_marker.replace('    }', insert_text.rstrip() + '\n    }')
+    )
+    
+    # Write back
+    with open('lib/interactive_rtw_planner.py', 'w') as f:
+        f.write(new_content)
+    
+    print(f"✓ Updated interactive_rtw_planner.py with {len(new_coords)} new airport coordinates")
 
 if __name__ == '__main__':
     main()
+
 
 
 

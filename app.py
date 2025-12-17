@@ -55,7 +55,7 @@ def init_app():
     
     if api_key:
         try:
-            from seats_aero_partner_api import SeatsAeroPartnerAPI
+            from lib.seats_aero_partner_api import SeatsAeroPartnerAPI
             data_source = SeatsAeroPartnerAPI(api_key)
             _using_api = True
             print(f"✓ Using Seats.aero Partner API (live data)")
@@ -70,7 +70,7 @@ def init_app():
         
         if os.path.exists(db_file):
             try:
-                from db_reader import DatabaseReader
+                from lib.db_reader import DatabaseReader
                 data_source = DatabaseReader(db_file)
                 _using_api = False
                 print(f"✓ Using SQLite database: {db_file}")
@@ -95,9 +95,9 @@ def init_app():
             if csv_file:
                 print(f"Building database from {csv_file}...")
                 try:
-                    from build_database import build_database
+                    from scripts.build_database import build_database
                     if build_database(csv_file, db_file):
-                        from db_reader import DatabaseReader
+                        from lib.db_reader import DatabaseReader
                         data_source = DatabaseReader(db_file)
                         _using_api = False
                         print(f"✓ Database built and loaded")
@@ -115,7 +115,7 @@ def init_app():
     
     # Load just coordinates/names (small memory footprint)
     try:
-        from interactive_rtw_planner import InteractiveRTWPlanner
+        from lib.interactive_rtw_planner import InteractiveRTWPlanner
         # Create a minimal planner just for coordinates - don't load CSV
         planner_coords = type('Coords', (), {
             'AIRPORT_COORDINATES': InteractiveRTWPlanner.AIRPORT_COORDINATES,
@@ -471,7 +471,7 @@ def get_nearby_airports():
 @app.route('/api/airport-coords', methods=['GET'])
 def get_airport_coords():
     """Get coordinates for airports using OpenFlights data"""
-    from airport_data import get_airport_info
+    from lib.airport_data import get_airport_info
     
     airports = request.args.getlist('airports')
     coords = {}
@@ -523,7 +523,7 @@ def get_all_airports():
 def validate_trip():
     """Validate a RTW trip"""
     try:
-        from interactive_rtw_planner import OneWorldRTWValidator, InteractiveRTWPlanner
+        from lib.interactive_rtw_planner import OneWorldRTWValidator, InteractiveRTWPlanner
         
         data = request.json
         segments = data.get('segments', [])
@@ -543,7 +543,7 @@ def validate_trip():
 @app.route('/api/airport-names', methods=['GET'])
 def get_airport_names():
     """Get airport names using OpenFlights data"""
-    from airport_data import get_airport_name as get_openflights_name
+    from lib.airport_data import get_airport_name as get_openflights_name
     
     airports = request.args.getlist('airports')
     names = {}
@@ -562,8 +562,8 @@ def get_airport_names():
 @app.route('/api/airport-continent', methods=['GET'])
 def get_airport_continent():
     """Get continent for airports"""
-    from interactive_rtw_planner import OneWorldRTWValidator
-    from airport_data import get_airport_info
+    from lib.interactive_rtw_planner import OneWorldRTWValidator
+    from lib.airport_data import get_airport_info
     
     airports = request.args.getlist('airports')
     continents = {}

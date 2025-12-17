@@ -6,7 +6,7 @@ Quick commands to manage your Render services via CLI
 
 import sys
 import os
-from render_api_client import RenderAPIClient
+from deployment.render_api_client import RenderAPIClient
 
 # API key
 API_KEY = "rnd_KSfch1qfb5CaigK85v719pOsJhuP"

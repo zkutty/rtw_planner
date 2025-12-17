@@ -3,7 +3,7 @@
 Script to find airports in CSV that are missing coordinates
 """
 import os
-from interactive_rtw_planner import InteractiveRTWPlanner
+from lib.interactive_rtw_planner import InteractiveRTWPlanner
 
 def main():
     csv_file = os.environ.get('CSV_FILE', 'seats.aero qantas Export.csv')
@@ -31,6 +31,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 

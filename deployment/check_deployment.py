@@ -2,7 +2,7 @@
 """
 Check Render deployment status and diagnose issues
 """
-from render_api_client import RenderAPIClient
+from deployment.render_api_client import RenderAPIClient
 import json
 
 API_KEY = "rnd_KSfch1qfb5CaigK85v719pOsJhuP"
@@ -51,4 +51,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

@@ -40,4 +40,7 @@ Thumbs.db
 # Data files
 *.json
 *.db
+coords_output.txt
+coords_to_add.txt
+rtw_trip_*.json
 

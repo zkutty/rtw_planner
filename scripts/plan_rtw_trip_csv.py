@@ -5,8 +5,8 @@ Interactive script to plan a round-the-world trip using CSV availability data
 import sys
 import os
 from datetime import datetime, timedelta
-from seats_aero_client import RoundTheWorldPlanner
-from csv_availability_reader import CSVSeatsAeroClient
+from lib.seats_aero_client import RoundTheWorldPlanner
+from lib.csv_availability_reader import CSVSeatsAeroClient
 
 
 def main():

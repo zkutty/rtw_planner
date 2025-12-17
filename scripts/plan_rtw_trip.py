@@ -4,7 +4,7 @@ Interactive script to plan a round-the-world trip using Seats.aero API
 """
 import sys
 from datetime import datetime, timedelta
-from seats_aero_client import SeatsAeroClient, RoundTheWorldPlanner
+from lib.seats_aero_client import SeatsAeroClient, RoundTheWorldPlanner
 
 
 def main():

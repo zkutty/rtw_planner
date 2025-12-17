@@ -1,0 +1,19 @@
+# Render.com deployment configuration
+# Supports both Seats.aero API (default) and SQLite database (fallback)
+# Set USE_DATABASE=true to use database mode, otherwise uses API if SEATS_AERO_API_KEY is set
+
+services:
+  - type: web
+    name: rtw-planner
+    runtime: python
+    buildCommand: pip install -r requirements.txt && (if [ "$USE_DATABASE" = "true" ]; then python scripts/build_database.py; else echo "Skipping database build - using API mode"; fi)
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: DB_FILE
+        value: "flights.db"
+      - key: FLASK_ENV
+        value: "production"
+      # Note: Set SEATS_AERO_API_KEY in Render dashboard to use API mode
+      # Set USE_DATABASE=true to force database mode

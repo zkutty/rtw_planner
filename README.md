@@ -1,164 +1,196 @@
-# Seats.aero Round-the-World Ticket Planner
+# Round-the-World Trip Planner
 
-This project helps you plan a round-the-world ticket using the Seats.aero API, specifically for oneworld alliance flights through Qantas.
+An interactive web application for planning oneworld alliance round-the-world tickets using the Seats.aero API.
 
-## Setup
+## Features
 
-1. **Get your API key:**
-   - Sign up for a Seats.aero Pro account at https://seats.aero
-   - Generate your API key at https://seats.aero/apikey
-   - Pro accounts get 1,000 API calls per day
+- **Interactive Map Visualization**: See available flights on a world map with route previews
+- **Real-time Flight Data**: Uses Seats.aero Partner API for live availability
+- **Trip Building**: Click flights to build your itinerary step-by-step
+- **RTW Validation**: Automatic validation against oneworld RTW rules
+- **Multiple Views**: Map view and table view for flight selection
+- **Filtering**: Date range, cabin class, and miles program filtering
+- **Offline Mode**: Fallback to SQLite database when API limits are hit
 
-2. **Install dependencies:**
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- Seats.aero Pro account with API key ([Get your key](https://seats.aero/settings))
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd rtw_planner
+   ```
+
+2. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Configure your API key:**
+3. **Configure API key**
+   
+   Create a `.env` file:
    ```bash
-   cp .env.example .env
-   ```
-   Then edit `.env` and add your API key:
-   ```
    SEATS_AERO_API_KEY=your_api_key_here
    ```
+   
+   Or set environment variables:
+   ```bash
+   export SEATS_AERO_API_KEY=your_api_key_here
+   ```
+
+4. **Run the application**
+   ```bash
+   python app.py
+   ```
+
+5. **Open in browser**
+   ```
+   http://localhost:5001
+   ```
+
+## Project Structure
+
+```
+rtw_planner/
+├── app.py                 # Main Flask application
+├── lib/                   # Core library modules
+│   ├── seats_aero_partner_api.py  # Seats.aero API client
+│   ├── db_reader.py              # Database reader
+│   ├── csv_availability_reader.py # CSV data reader
+│   ├── interactive_rtw_planner.py # RTW planning logic
+│   ├── airport_data.py            # Airport data utilities
+│   └── seats_aero_client.py       # Legacy API client
+├── scripts/              # Utility scripts
+│   ├── build_database.py         # Build SQLite from CSV
+│   ├── plan_rtw_trip.py          # CLI trip planner
+│   ├── example_usage.py           # API usage examples
+│   └── ...                        # Other utility scripts
+├── deployment/           # Deployment configuration
+│   ├── render.yaml               # Render.com config
+│   ├── render_api_client.py       # Render API client
+│   └── manage_render.py           # Deployment management
+├── docs/                 # Documentation
+│   ├── DEPLOYMENT.md             # Deployment guide
+│   └── ...                        # Other docs
+├── static/              # Static assets
+│   ├── css/
+│   └── js/
+└── templates/          # HTML templates
+    ├── index.html
+    └── suggestions.html
+```
 
 ## Usage
 
-### Web Interface (Recommended)
-
-Launch the interactive web-based trip planner with map visualization:
-
-```bash
-python3 app.py
-```
-
-Then open your browser to `http://localhost:5000`
-
-**Features:**
-- Interactive map showing available flight routes
-- Hover over flights to preview routes on the map
-- Click to select flights and build your trip
-- Visual indicators for direct vs connecting flights
-- Real-time distance tracking and 35K mile limit monitoring
-- Undo/redo functionality
-- Date range and cabin class filtering
-- Nearby airport suggestions
-
-### Command Line Interface
-
-#### Interactive Planner
-
-```bash
-python3 interactive_rtw_planner.py "seats.aero qantas Export.csv"
-```
-
-Build your trip step-by-step with interactive prompts.
-
-#### CSV-based Planner
-
-```bash
-python3 plan_rtw_trip_csv.py "seats.aero qantas Export.csv"
-```
-
-### Basic Usage (Python API)
-
-```python
-from seats_aero_client import SeatsAeroClient, RoundTheWorldPlanner
-
-# Initialize client
-client = SeatsAeroClient()
-
-# Create planner
-planner = RoundTheWorldPlanner(client)
-
-# Search for RTW availability in March 2026
-result = planner.search_rtw_availability(
-    start_date="2026-03-01",
-    duration_days=30,
-    start_city="SYD"
-)
-
-print(result)
-```
-
-### Run the example script
-
-```bash
-python seats_aero_client.py
-```
-
-## Features
-
 ### Web Interface
-- **Interactive Map Visualization**: See available flights on a world map
-- **Route Preview**: Hover over flights to see routes highlighted
-- **Visual Trip Building**: Click flights to build your itinerary
-- **Real-time Validation**: Track distance, segments, and RTW rules
-- **Filtering**: Date range and cabin class filters
-- **Nearby Airports**: Automatic suggestions when no flights found
+
+The web interface provides:
+- **Map View**: Visual flight selection on an interactive map
+- **Table View**: Tabular flight data with filtering
+- **Trip Summary**: Real-time trip validation and distance tracking
+- **Flight Filters**: Filter by date, cabin class, continent, etc.
 
 ### Command Line Tools
-- **Interactive Planner**: Step-by-step trip building with prompts
-- **CSV Reader**: Flexible CSV data parsing and searching
-- **Trip Validation**: Automatic oneworld RTW rule checking
 
-### Python API
-- **SeatsAeroClient**: Direct API client for seats.aero
-  - Search availability for specific routes
-  - Bulk availability searches
-  - Get trip and route details
+#### Interactive Trip Planner
+```bash
+python scripts/plan_rtw_trip.py
+```
 
-- **RoundTheWorldPlanner**: Helper class for RTW planning
-  - Plan multi-segment round-the-world trips
-  - Filter by oneworld alliance and Qantas
-  - Calculate segment dates based on trip duration
+#### Build Database from CSV
+```bash
+python scripts/build_database.py
+```
 
-## oneworld Round-the-World Rules
+#### Example API Usage
+```bash
+python scripts/example_usage.py
+```
 
-When planning your RTW trip, keep in mind:
+## Configuration
+
+### Environment Variables
+
+- `SEATS_AERO_API_KEY` - Seats.aero Partner API key (required for API mode)
+- `USE_DATABASE` - Set to `true` to use database mode instead of API
+- `DB_FILE` - Path to SQLite database file (default: `flights.db`)
+- `CSV_FILE` - Path to CSV export file (for database building)
+- `FLASK_SECRET_KEY` - Secret key for Flask sessions
+- `SITE_PASSWORD` - Optional password protection for the site
+- `PORT` - Port to run the server on (default: 5001)
+
+### API Mode vs Database Mode
+
+**API Mode (Default)**
+- Uses live data from Seats.aero Partner API
+- Requires `SEATS_AERO_API_KEY`
+- Up-to-date availability
+- Subject to API rate limits (1,000 calls/day for Pro)
+
+**Database Mode**
+- Uses local SQLite database built from CSV export
+- Set `USE_DATABASE=true`
+- Offline-capable
+- Data from CSV export (may be outdated)
+
+## oneworld RTW Rules
+
+When planning your trip, keep in mind:
 
 - **Minimum 3 segments, maximum 16 segments**
 - **Must cross both Atlantic and Pacific oceans**
 - **Only one crossing of each ocean permitted**
 - **Fare based on number of continents visited (3-6 continents)**
 - **Must return to origin city**
+- **Maximum 35,000 miles total**
+
+## Deployment
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment instructions.
+
+Quick deploy to Render.com:
+1. Push code to git repository
+2. Connect repository to Render
+3. Set environment variables in Render dashboard
+4. Deploy!
+
+## Development
+
+### Running Locally
+
+```bash
+# Development mode
+python app.py
+
+# Production mode (with gunicorn)
+gunicorn app:app --bind 0.0.0.0:5001 --workers 1 --threads 2
+```
+
+### Project Structure
+
+- `lib/` - Core library modules (API clients, validators, data readers)
+- `scripts/` - Utility scripts for database building, coordinate updates, etc.
+- `deployment/` - Deployment configuration and tools
+- `docs/` - Documentation
 
 ## API Documentation
 
-For detailed API documentation, visit:
-- https://developers.seats.aero/reference/getting-started-p
+- Seats.aero Partner API: https://developers.seats.aero/reference/getting-started-p
+- Airport data from [OpenFlights Airport Database](https://github.com/jpatokal/openflights)
 
-## Airport Data
+## License
 
-This project includes airport coordinate and metadata from the [OpenFlights Airport Database](https://github.com/jpatokal/openflights/blob/master/data/airports.dat), providing accurate coordinates for 6,000+ airports worldwide.
+This project is for personal use. Seats.aero API usage is subject to their terms of service.
 
-## Notes
+## Support
 
-- The API uses cached data by default (Pro users)
-- Live search requires a commercial agreement
-- API rate limit: 1,000 calls per day for Pro users
-- Some endpoints may require specific parameters - check the API docs
-
-## Git Repository
-
-This project is initialized as a git repository. To push to a remote:
-
-### Quick Setup
-
-Run the interactive setup script:
-```bash
-./setup_remote.sh
-```
-
-### Manual Setup
-
-See [PUSH_INSTRUCTIONS.md](PUSH_INSTRUCTIONS.md) for detailed instructions on pushing to GitHub, GitLab, Bitbucket, or a custom remote.
-
-## Customization
-
-You can customize the RTW route by modifying the `plan_rtw_trip` method in `RoundTheWorldPlanner` class. The example uses:
-- SYD → HKG → LHR → JFK → LAX → SYD
-
-Adjust the `sample_route` list to match your preferred itinerary.
-
+For issues and questions:
+- Check [docs/](docs/) for documentation
+- Review deployment logs for deployment issues
+- Check Seats.aero API status for API-related problems
