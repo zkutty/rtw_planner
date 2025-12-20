@@ -105,7 +105,7 @@ class GameState {
         this.holeLabels = [];
         this.path = [];
 
-        // Lightweight demo scene for textures/animations (swap with your real tile/obstacle data)
+        // Lightweight demo scene for animations (swap with your real tile/obstacle data)
         this.scene = this.createDemoScene();
     }
 
@@ -117,31 +117,13 @@ class GameState {
 
     createDemoScene() {
         // Keep this lightweight: a small number of primitives to avoid FPS drops.
-        const terrainTiles = [];
-        const tile = 56;
-        const gap = 0; // keep internal grid, but don’t visually show tile borders
-        const cols = 12;
-        const rows = 8;
-
-        // Simple demo course layout: fairway center strip, rough around, sand pockets, water corner
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                const px = 40 + x * (tile + gap);
-                const py = 40 + y * (tile + gap);
-
-                let type = 'rough';
-                const dx = Math.abs(x - Math.floor(cols / 2));
-                if (dx <= 1) type = 'fairway';
-                if (x === 1 && y >= 5) type = 'water';
-                if ((x === 8 && y === 2) || (x === 9 && y === 3)) type = 'sand';
-                if (x === 0 || y === 0 || x === cols - 1 || y === rows - 1) type = 'deep_rough';
-
-                terrainTiles.push({
-                    gridX: x,
-                    gridY: y,
-                    type,
-                    x: px,
-                    y: py,
+        const waterTiles = [];
+        const tile = 64;
+        for (let y = 0; y < 4; y++) {
+            for (let x = 0; x < 6; x++) {
+                waterTiles.push({
+                    x: 40 + x * (tile + 6),
+                    y: 40 + y * (tile + 6),
                     w: tile,
                     h: tile
                 });
@@ -155,136 +137,7 @@ class GameState {
             { type: 'bush', x: 590, y: 300, r: 12, phase: 2.6 }
         ];
 
-        return { terrainTiles, obstacles };
-    }
-}
-
-// =============================================================================
-// TERRAIN TEXTURES (procedural, cached, deterministic)
-// =============================================================================
-
-function clamp01(v) {
-    return Math.max(0, Math.min(1, v));
-}
-
-function mulberry32(seed) {
-    let t = seed >>> 0;
-    return function rand() {
-        t += 0x6D2B79F5;
-        let r = Math.imul(t ^ (t >>> 15), 1 | t);
-        r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
-}
-
-function hash2D(x, y, seed = 1337) {
-    // Fast deterministic integer hash for tile coords
-    let h = seed ^ (x * 374761393) ^ (y * 668265263);
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    return (h ^ (h >>> 16)) >>> 0;
-}
-
-function adjustColorHex(hex, mult) {
-    // mult ~ 0.96..1.04
-    const c = hex.startsWith('#') ? hex.slice(1) : hex;
-    const r = parseInt(c.slice(0, 2), 16);
-    const g = parseInt(c.slice(2, 4), 16);
-    const b = parseInt(c.slice(4, 6), 16);
-    const rr = Math.max(0, Math.min(255, Math.round(r * mult)));
-    const gg = Math.max(0, Math.min(255, Math.round(g * mult)));
-    const bb = Math.max(0, Math.min(255, Math.round(b * mult)));
-    return `rgb(${rr}, ${gg}, ${bb})`;
-}
-
-class TerrainTextureCache {
-    constructor() {
-        this.patterns = new Map(); // key => CanvasPattern
-        this.baseColors = {
-            fairway: '#5fbf65',
-            rough: '#4aa857',
-            deep_rough: '#3a8646',
-            sand: '#d9c27c',
-            water: '#4aa3d8'
-        };
-    }
-
-    getBaseColor(type) {
-        return this.baseColors[type] ?? '#7a7a7a';
-    }
-
-    getPattern(ctx, key, buildFn) {
-        const existing = this.patterns.get(key);
-        if (existing) return existing;
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
-        const cctx = canvas.getContext('2d');
-        buildFn(cctx, canvas.width, canvas.height);
-        const pat = ctx.createPattern(canvas, 'repeat');
-        this.patterns.set(key, pat);
-        return pat;
-    }
-
-    getGrainPattern(ctx, type) {
-        return this.getPattern(ctx, `grain:${type}`, (cctx, w, h) => {
-            cctx.clearRect(0, 0, w, h);
-            const rand = mulberry32(hash2D(w, h, 9001 ^ type.length));
-
-            // Cheap “grain”: scattered tiny dots
-            const dotCount =
-                type === 'deep_rough' ? 220 :
-                type === 'rough' ? 160 :
-                type === 'sand' ? 180 :
-                type === 'water' ? 120 :
-                120;
-
-            for (let i = 0; i < dotCount; i++) {
-                const x = Math.floor(rand() * w);
-                const y = Math.floor(rand() * h);
-                const a =
-                    type === 'deep_rough' ? 0.18 :
-                    type === 'rough' ? 0.14 :
-                    type === 'sand' ? 0.12 :
-                    type === 'water' ? 0.10 :
-                    0.10;
-                cctx.fillStyle = `rgba(0,0,0,${a})`;
-                cctx.fillRect(x, y, 1, 1);
-            }
-        });
-    }
-
-    getMowPattern(ctx) {
-        return this.getPattern(ctx, 'mow:fairway', (cctx, w, h) => {
-            cctx.clearRect(0, 0, w, h);
-            cctx.strokeStyle = 'rgba(255,255,255,0.12)';
-            cctx.lineWidth = 3;
-
-            // Diagonal banding lines
-            for (let i = -h; i < w + h; i += 10) {
-                cctx.beginPath();
-                cctx.moveTo(i, 0);
-                cctx.lineTo(i + h, h);
-                cctx.stroke();
-            }
-        });
-    }
-
-    getSandSpecklePattern(ctx) {
-        return this.getPattern(ctx, 'speckle:sand', (cctx, w, h) => {
-            cctx.clearRect(0, 0, w, h);
-            const rand = mulberry32(hash2D(7, 11, 424242));
-
-            // Speckle: mix of darker and lighter dots
-            for (let i = 0; i < 260; i++) {
-                const x = rand() * w;
-                const y = rand() * h;
-                const isDark = rand() > 0.55;
-                const a = isDark ? 0.16 : 0.10;
-                cctx.fillStyle = isDark ? `rgba(120,90,40,${a})` : `rgba(255,255,255,${a})`;
-                cctx.fillRect(x, y, 1, 1);
-            }
-        });
+        return { waterTiles, obstacles };
     }
 }
 
@@ -301,8 +154,6 @@ class CanvasRenderer {
         }
         this.ctx = this.canvas.getContext('2d');
         this.gridSize = 20;
-        this.terrain = new TerrainTextureCache();
-        this.terrainSeed = 1337;
         this.setupCanvas();
     }
 
@@ -427,82 +278,33 @@ class CanvasRenderer {
         const t = frame?.t ?? 0;
         const animationsEnabled = Boolean(frame?.animationsEnabled);
 
-        const tiles = gameState.scene?.terrainTiles ?? [];
+        const tiles = gameState.scene?.waterTiles ?? [];
         const obstacles = gameState.scene?.obstacles ?? [];
 
-        this.drawTerrainTiles(tiles);
+        this.drawWaterTiles(tiles);
 
         // Animations should work in COZY mode too (it’s part of the “alive” feel).
         if (animationsEnabled) {
-            const waterTiles = tiles.filter(tt => tt.type === 'water');
-            this.drawWaterShimmer(waterTiles, t);
+            this.drawWaterShimmer(tiles, t);
         }
 
         this.drawObstacles(obstacles, t, animationsEnabled);
     }
 
-    drawTerrainTiles(tiles) {
-        // For each tile:
-        // - base color fill
-        // - mild per-tile color variation (deterministic)
-        // - subtle grain overlay (cached pattern)
-        // - terrain-specific extras (mow banding / sand speckle / rough noisier)
+    drawWaterTiles(tiles) {
         if (!tiles || tiles.length === 0) return;
-
         const ctx = this.ctx;
+
         ctx.save();
-
         for (const tile of tiles) {
-            const type = tile.type ?? 'rough';
-            const base = this.terrain.getBaseColor(type);
-            const h = hash2D(tile.gridX ?? Math.round(tile.x), tile.gridY ?? Math.round(tile.y), this.terrainSeed);
-            const rand = mulberry32(h);
-
-            // +/- a few percent (avoid checkerboard feeling)
-            const variation = (rand() * 2 - 1) * 0.035; // ~ +/-3.5%
-            const mult = clamp01(1 + variation);
-
-            ctx.fillStyle = adjustColorHex(base, mult);
+            ctx.fillStyle = '#4aa3d8';
             ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
 
-            // Grain overlay (low alpha)
-            ctx.save();
-            ctx.globalAlpha =
-                type === 'deep_rough' ? 0.14 :
-                type === 'rough' ? 0.12 :
-                type === 'sand' ? 0.10 :
-                type === 'water' ? 0.08 :
-                0.09;
-            ctx.fillStyle = this.terrain.getGrainPattern(ctx, type);
-            ctx.translate(tile.x, tile.y);
-            ctx.fillRect(0, 0, tile.w, tile.h);
-            ctx.restore();
-
-            // Terrain-specific extras
-            if (type === 'fairway') {
-                ctx.save();
-                ctx.globalAlpha = 0.06; // very subtle mow banding
-                ctx.fillStyle = this.terrain.getMowPattern(ctx);
-                ctx.translate(tile.x, tile.y);
-                ctx.fillRect(0, 0, tile.w, tile.h);
-                ctx.restore();
-            } else if (type === 'sand') {
-                ctx.save();
-                ctx.globalAlpha = 0.10;
-                ctx.fillStyle = this.terrain.getSandSpecklePattern(ctx);
-                ctx.translate(tile.x, tile.y);
-                ctx.fillRect(0, 0, tile.w, tile.h);
-                ctx.restore();
-            } else if (type === 'deep_rough') {
-                // Slightly darker “mass” overlay for deep rough
-                ctx.save();
-                ctx.globalAlpha = 0.06;
-                ctx.fillStyle = 'rgba(0,0,0,0.8)';
-                ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
-                ctx.restore();
-            }
+            // subtle edge depth (still cheap)
+            ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(tile.x + 0.5, tile.y + 0.5, tile.w - 1, tile.h - 1);
         }
-
         ctx.restore();
     }
 
