@@ -13,6 +13,34 @@ const ViewMode = {
     ARCHITECT: 'ARCHITECT'
 };
 
+// =============================================================================
+// ANIMATION SETTINGS
+// =============================================================================
+
+class AnimationsManager {
+    constructor() {
+        this.enabled = true; // Default: on
+        this.listeners = [];
+    }
+
+    setEnabled(enabled) {
+        this.enabled = Boolean(enabled);
+        this.notifyListeners();
+    }
+
+    toggle() {
+        this.setEnabled(!this.enabled);
+    }
+
+    subscribe(listener) {
+        this.listeners.push(listener);
+    }
+
+    notifyListeners() {
+        this.listeners.forEach(listener => listener(this.enabled));
+    }
+}
+
 class ViewModeManager {
     constructor() {
         this.currentMode = ViewMode.COZY; // Default to COZY
@@ -76,12 +104,40 @@ class GameState {
         this.holeLines = [];
         this.holeLabels = [];
         this.path = [];
+
+        // Lightweight demo scene for animations (swap with your real tile/obstacle data)
+        this.scene = this.createDemoScene();
     }
 
     updateMetrics(delta) {
         // Update metrics based on game simulation
         // This would be called by your game loop
         this.timeElapsed += delta;
+    }
+
+    createDemoScene() {
+        // Keep this lightweight: a small number of primitives to avoid FPS drops.
+        const waterTiles = [];
+        const tile = 64;
+        for (let y = 0; y < 4; y++) {
+            for (let x = 0; x < 6; x++) {
+                waterTiles.push({
+                    x: 40 + x * (tile + 6),
+                    y: 40 + y * (tile + 6),
+                    w: tile,
+                    h: tile
+                });
+            }
+        }
+
+        const obstacles = [
+            { type: 'tree', x: 520, y: 140, r: 18, phase: 0.3 },
+            { type: 'tree', x: 580, y: 210, r: 16, phase: 1.1 },
+            { type: 'bush', x: 520, y: 260, r: 14, phase: 2.0 },
+            { type: 'bush', x: 590, y: 300, r: 12, phase: 2.6 }
+        ];
+
+        return { waterTiles, obstacles };
     }
 }
 
@@ -198,7 +254,7 @@ class CanvasRenderer {
         this.ctx.stroke();
     }
 
-    render(gameState, viewMode) {
+    render(gameState, viewMode, frame = null) {
         this.clear();
         
         // Draw background
@@ -214,17 +270,135 @@ class CanvasRenderer {
         this.drawPath(viewMode, gameState.path);
 
         // Draw game content (always visible)
-        this.drawGameContent(gameState);
+        this.drawGameContent(gameState, frame);
     }
 
-    drawGameContent(gameState) {
-        // Draw your actual game content here
-        // This is always visible regardless of view mode
-        this.ctx.fillStyle = '#333';
-        this.ctx.font = '16px sans-serif';
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.fillText('Game Canvas', this.canvas.width / 2, this.canvas.height / 2);
+    drawGameContent(gameState, frame) {
+        // Demo scene for lightweight animations. Replace with your real render pipeline.
+        const t = frame?.t ?? 0;
+        const animationsEnabled = Boolean(frame?.animationsEnabled);
+
+        const tiles = gameState.scene?.waterTiles ?? [];
+        const obstacles = gameState.scene?.obstacles ?? [];
+
+        this.drawWaterTiles(tiles);
+
+        // Animations should work in COZY mode too (it’s part of the “alive” feel).
+        if (animationsEnabled) {
+            this.drawWaterShimmer(tiles, t);
+        }
+
+        this.drawObstacles(obstacles, t, animationsEnabled);
+    }
+
+    drawWaterTiles(tiles) {
+        if (!tiles || tiles.length === 0) return;
+        const ctx = this.ctx;
+
+        ctx.save();
+        for (const tile of tiles) {
+            ctx.fillStyle = '#4aa3d8';
+            ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+
+            // subtle edge depth (still cheap)
+            ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(tile.x + 0.5, tile.y + 0.5, tile.w - 1, tile.h - 1);
+        }
+        ctx.restore();
+    }
+
+    drawWaterShimmer(tiles, t) {
+        // Water shimmer = moving soft highlight band via a reused gradient.
+        // No per-pixel work; one gradient per frame.
+        if (!tiles || tiles.length === 0) return;
+
+        const ctx = this.ctx;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        // Slow drift (subtle)
+        const driftX = (t * 6) % (w + 200) - 100;
+        const driftY = (t * 2) % (h + 200) - 100;
+
+        ctx.save();
+        ctx.globalAlpha = 0.06; // very low intensity
+
+        const grad = ctx.createLinearGradient(driftX, driftY, driftX + w, driftY + h);
+        grad.addColorStop(0.0, 'rgba(255,255,255,0)');
+        grad.addColorStop(0.45, 'rgba(255,255,255,0)');
+        grad.addColorStop(0.55, 'rgba(255,255,255,1)');
+        grad.addColorStop(0.65, 'rgba(255,255,255,0)');
+        grad.addColorStop(1.0, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+
+        for (const tile of tiles) {
+            ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+        }
+
+        ctx.restore();
+    }
+
+    drawObstacles(obstacles, t, animationsEnabled) {
+        if (!obstacles || obstacles.length === 0) return;
+        const ctx = this.ctx;
+
+        ctx.save();
+        for (const o of obstacles) {
+            const phase = o.phase ?? 0;
+
+            if (o.type === 'tree') {
+                // Tiny rotation around base using time + per-obstacle phase
+                const sway = animationsEnabled ? Math.sin(t * 1.2 + phase) * 0.04 : 0; // radians
+
+                ctx.save();
+                ctx.translate(o.x, o.y);
+                ctx.rotate(sway);
+
+                // trunk
+                ctx.strokeStyle = '#6b4f2a';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(0, 10);
+                ctx.lineTo(0, -18);
+                ctx.stroke();
+
+                // canopy
+                ctx.fillStyle = '#2f7d32';
+                ctx.beginPath();
+                ctx.arc(0, -26, o.r ?? 18, 0, Math.PI * 2);
+                ctx.fill();
+
+                // highlight
+                ctx.globalAlpha = 0.08;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(-6, -30, (o.r ?? 18) * 0.55, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+
+                ctx.restore();
+            } else if (o.type === 'bush') {
+                // Tiny lateral bob (offset) rather than rotation
+                const bob = animationsEnabled ? Math.sin(t * 1.6 + phase) * 1.5 : 0; // px
+
+                ctx.save();
+                ctx.translate(o.x + bob, o.y);
+                ctx.fillStyle = '#3a8f3e';
+                ctx.beginPath();
+                ctx.arc(0, 0, o.r ?? 14, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.globalAlpha = 0.08;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(-5, -4, (o.r ?? 14) * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.restore();
+            }
+        }
+        ctx.restore();
     }
 }
 
@@ -339,12 +513,14 @@ class ViewModeToggle {
         const isCozy = this.viewModeManager.isCozy();
         
         this.container.innerHTML = `
+            <h3 style="margin-bottom: 0.75rem;">View Mode</h3>
             <div class="view-mode-toggle-wrapper">
                 <button id="view-mode-toggle-btn" class="view-mode-toggle-btn ${isCozy ? 'cozy-active' : 'architect-active'}">
                     <span class="toggle-label-cozy">Cozy</span>
                     <span class="toggle-label-architect">Architect</span>
                 </button>
             </div>
+            <div id="animations-toggle-container"></div>
         `;
 
         const button = this.container.querySelector('#view-mode-toggle-btn');
@@ -368,17 +544,70 @@ class ViewModeToggle {
 }
 
 // =============================================================================
+// ANIMATIONS TOGGLE UI
+// =============================================================================
+
+class AnimationsToggle {
+    constructor(containerId, viewModeManager, animationsManager) {
+        this.container = document.getElementById(containerId);
+        this.viewModeManager = viewModeManager;
+        this.animationsManager = animationsManager;
+
+        if (!this.container) return;
+
+        this.viewModeManager.subscribe(() => this.render());
+        this.animationsManager.subscribe(() => this.render());
+        this.render();
+    }
+
+    render() {
+        if (!this.container) return;
+
+        const isCozy = this.viewModeManager.isCozy();
+        if (!isCozy) {
+            this.container.innerHTML = '';
+            this.container.style.display = 'none';
+            return;
+        }
+
+        this.container.style.display = 'block';
+        const checked = this.animationsManager.enabled ? 'checked' : '';
+
+        this.container.innerHTML = `
+            <div class="anim-toggle-row">
+                <label class="anim-toggle-label" for="animations-toggle">Animations</label>
+                <label class="switch">
+                    <input id="animations-toggle" type="checkbox" ${checked} />
+                    <span class="slider"></span>
+                </label>
+            </div>
+        `;
+
+        const input = this.container.querySelector('#animations-toggle');
+        if (input) {
+            input.addEventListener('change', (e) => {
+                this.animationsManager.setEnabled(e.target.checked);
+            });
+        }
+    }
+}
+
+// =============================================================================
 // MAIN APPLICATION
 // =============================================================================
 
 class GameApp {
     constructor() {
         this.viewModeManager = new ViewModeManager();
+        this.animationsManager = new AnimationsManager();
         this.gameState = new GameState();
         this.renderer = new CanvasRenderer('game-canvas');
         this.metricsPanel = new MetricsPanel('metrics-panel');
         this.viewModeToggle = null;
         this.animationFrame = null;
+        this.animationsToggle = null;
+        this.running = false;
+        this.lastTimestampMs = null;
         
         this.init();
     }
@@ -401,14 +630,19 @@ class GameApp {
 
         // Setup view mode toggle
         this.viewModeToggle = new ViewModeToggle('view-mode-toggle-container', this.viewModeManager);
+        this.animationsToggle = new AnimationsToggle('animations-toggle-container', this.viewModeManager, this.animationsManager);
 
         // Subscribe to view mode changes
         this.viewModeManager.subscribe((mode) => {
             this.onViewModeChanged(mode);
         });
 
-        // Start render loop
-        this.startRenderLoop();
+        // Pause/resume animations when tab visibility changes; also stop RAF when animations are disabled.
+        this.animationsManager.subscribe(() => this.syncLoopWithSettings());
+        document.addEventListener('visibilitychange', () => this.syncLoopWithSettings());
+
+        // Start render loop (or static render)
+        this.syncLoopWithSettings();
 
         // Initialize sample data for overlays (ARCHITECT mode)
         this.initializeSampleOverlays();
@@ -481,26 +715,65 @@ class GameApp {
     }
 
     startRenderLoop() {
-        const loop = (timestamp) => {
-            // Update game state
-            const delta = 0.016; // ~60fps
-            this.gameState.updateMetrics(delta);
+        if (this.running) return;
+        this.running = true;
+        this.lastTimestampMs = null;
 
-            // Render
-            this.render();
+        const loop = (timestampMs) => {
+            if (!this.running) return;
 
-            // Continue loop
+            // If hidden or disabled mid-loop, stop scheduling frames.
+            if (document.visibilityState !== 'visible' || !this.animationsManager.enabled) {
+                this.running = false;
+                return;
+            }
+
+            if (this.lastTimestampMs == null) {
+                this.lastTimestampMs = timestampMs;
+            }
+            const dt = Math.min(0.05, (timestampMs - this.lastTimestampMs) / 1000);
+            this.lastTimestampMs = timestampMs;
+
+            // Underlying sim logic should live elsewhere; this is just placeholder metrics.
+            this.gameState.updateMetrics(dt);
+
+            this.render(timestampMs / 1000);
             this.animationFrame = requestAnimationFrame(loop);
         };
+
         this.animationFrame = requestAnimationFrame(loop);
     }
 
-    render() {
+    syncLoopWithSettings() {
+        const shouldAnimate = this.animationsManager.enabled && document.visibilityState === 'visible';
+        if (shouldAnimate) {
+            this.startRenderLoop();
+            return;
+        }
+
+        this.stopRenderLoop();
+        this.render();
+    }
+
+    stopRenderLoop() {
+        this.running = false;
+        this.lastTimestampMs = null;
+        if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+            this.animationFrame = null;
+        }
+    }
+
+    render(tSeconds = null) {
         const viewMode = this.viewModeManager.currentMode;
         
         // Render canvas
         if (this.renderer) {
-            this.renderer.render(this.gameState, viewMode);
+            const t = tSeconds ?? (this.gameState?.timeElapsed ?? 0);
+            this.renderer.render(this.gameState, viewMode, {
+                t,
+                animationsEnabled: this.animationsManager.enabled && document.visibilityState === 'visible'
+            });
         }
 
         // Render metrics panel
@@ -510,9 +783,7 @@ class GameApp {
     }
 
     destroy() {
-        if (this.animationFrame) {
-            cancelAnimationFrame(this.animationFrame);
-        }
+        this.stopRenderLoop();
     }
 }
 
