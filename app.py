@@ -668,7 +668,7 @@ def suggest_trips():
 init_app()
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5001))
     debug = os.environ.get('FLASK_ENV') != 'production'
     print(f"🌐 Starting web server on http://localhost:{port}")
     app.run(debug=debug, host='0.0.0.0', port=port)
