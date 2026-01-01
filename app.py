@@ -116,14 +116,26 @@ def init_app():
     # Load just coordinates/names (small memory footprint)
     try:
         from lib.interactive_rtw_planner import InteractiveRTWPlanner
-        # Create a minimal planner just for coordinates - don't load CSV
-        planner_coords = type('Coords', (), {
-            'AIRPORT_COORDINATES': InteractiveRTWPlanner.AIRPORT_COORDINATES,
-            'AIRPORT_NAMES': InteractiveRTWPlanner.AIRPORT_NAMES,
-            'get_airport_name': staticmethod(InteractiveRTWPlanner.get_airport_name),
-            'calculate_distance_miles': staticmethod(InteractiveRTWPlanner.calculate_distance_miles),
-            'get_nearby_airports': staticmethod(InteractiveRTWPlanner.get_nearby_airports),
-        })()
+
+        # Create a minimal planner class just for coordinates - don't load CSV
+        class AirportCoordinates:
+            """Lightweight wrapper for airport coordinate data"""
+            AIRPORT_COORDINATES = InteractiveRTWPlanner.AIRPORT_COORDINATES
+            AIRPORT_NAMES = InteractiveRTWPlanner.AIRPORT_NAMES
+
+            @staticmethod
+            def get_airport_name(airport_code):
+                return InteractiveRTWPlanner.get_airport_name(airport_code)
+
+            @staticmethod
+            def calculate_distance_miles(origin, destination):
+                return InteractiveRTWPlanner.calculate_distance_miles(origin, destination)
+
+            @staticmethod
+            def get_nearby_airports(airport, max_results=5):
+                return InteractiveRTWPlanner.get_nearby_airports(airport, max_results)
+
+        planner_coords = AirportCoordinates()
     except Exception as e:
         print(f"Warning: Could not load airport data: {e}")
     
@@ -656,7 +668,7 @@ def suggest_trips():
 init_app()
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5001))
+    port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') != 'production'
     print(f"🌐 Starting web server on http://localhost:{port}")
     app.run(debug=debug, host='0.0.0.0', port=port)

@@ -91,9 +91,9 @@ def build_database(csv_file: str, db_file: str = 'flights.db'):
             def safe_int(val):
                 try:
                     return int(str(val).strip()) if val else 0
-                except:
+                except (ValueError, TypeError):
                     return 0
-            
+
             def safe_str(val):
                 return str(val).strip() if val else None
             
