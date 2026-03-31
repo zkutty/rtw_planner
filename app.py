@@ -761,6 +761,72 @@ def airport_has_flights():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/availability-calendar', methods=['GET'])
+def availability_calendar():
+    """Get daily availability counts for a route over a date range (for calendar heatmap)"""
+    if not data_source:
+        return jsonify({'error': 'Not initialized'}), 500
+
+    try:
+        origin = _validate_airport(request.args.get('origin', ''), 'origin')
+        destination = _validate_airport(request.args.get('destination', ''), 'destination')
+        start_date = _validate_date(request.args.get('start_date', ''), 'start_date')
+        end_date = _validate_date(request.args.get('end_date', ''), 'end_date')
+        miles_program = request.args.get('source', 'qantas')
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    try:
+        if _using_api:
+            flights = data_source.get_all_availability(
+                origin_airport=origin,
+                destination_airport=destination,
+                start_date=start_date,
+                end_date=end_date,
+                max_results=500,
+                source=miles_program
+            )
+            # Aggregate by date
+            day_counts = {}
+            for record in flights:
+                d = record.get('Date', '')
+                if not d:
+                    continue
+                if d not in day_counts:
+                    day_counts[d] = {'business': 0, 'premium': 0, 'economy': 0, 'total': 0}
+                if record.get('JAvailable'):
+                    day_counts[d]['business'] += 1
+                if record.get('WAvailable'):
+                    day_counts[d]['premium'] += 1
+                if record.get('YAvailable'):
+                    day_counts[d]['economy'] += 1
+                day_counts[d]['total'] += 1
+        else:
+            # Database mode: query flights by origin+destination in date range
+            flights = data_source.get_flights_from_origin(origin, start_date, 30)
+            flights = [f for f in flights if f['destination'] == destination]
+            day_counts = {}
+            for f in flights:
+                d = f['date']
+                if d not in day_counts:
+                    day_counts[d] = {'business': 0, 'premium': 0, 'economy': 0, 'total': 0}
+                if f.get('business_seats', 0) > 0:
+                    day_counts[d]['business'] += 1
+                if f.get('premium_economy_seats', 0) > 0:
+                    day_counts[d]['premium'] += 1
+                if f.get('economy_seats', 0) > 0:
+                    day_counts[d]['economy'] += 1
+                day_counts[d]['total'] += 1
+
+        return cached_json({
+            'origin': origin,
+            'destination': destination,
+            'days': day_counts
+        }, max_age=300)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/suggest-trips', methods=['POST'])
 def suggest_trips():
     """Generate trip suggestions - simplified for memory efficiency"""

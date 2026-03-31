@@ -1115,7 +1115,15 @@ function renderFlightListItems(flights, headerHTML = '', direction = 'forward', 
     const key = flights.map(f => `${f.origin}${f.destination}${f.date}`).join('|') + '|' + direction;
     if (key === AppState._lastRenderedFlightKey && !targetDateRange) return;
     AppState._lastRenderedFlightKey = key;
-    
+
+    // Clean up any previous virtual scroll
+    VirtualScroll.cleanup();
+
+    // Use virtual scrolling for large result sets
+    if (VirtualScroll.init(flights, headerHTML, direction, targetDateRange)) {
+        return; // Virtual scroll took over rendering
+    }
+
     flightList.innerHTML = headerHTML + flights.map((flight, index) => {
         const hasBusiness = flight.business_miles_int > 0;
         const hasPremium = flight.premium_economy_miles_int > 0;
@@ -1806,8 +1814,9 @@ function updateTripSummary() {
         }
         
         return `
-            <div class="trip-segment" data-segment-index="${index}">
+            <div class="trip-segment" data-segment-index="${index}" draggable="true" style="cursor: grab;">
                 <div class="trip-segment-header">
+                    <span class="drag-handle" title="Drag to reorder">⠿</span>
                     Segment ${seg.segment}: ${seg.origin} → ${seg.destination}
                     <button onclick="editSegmentDate(${index})" style="margin-left: 0.5rem; padding: 2px 6px; background: #667eea; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.7rem;">Edit Date</button>
                 </div>
@@ -2356,6 +2365,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Table view initialization
     initTableView();
 
+    // Initialize drag-to-reorder for trip segments
+    SegmentDrag.init();
+
     // Show onboarding for first-time visitors (after a short delay for map to load)
     setTimeout(() => Onboarding.start(), 800);
 });
@@ -2857,6 +2869,410 @@ const Onboarding = (() => {
 })();
 
 // =============================================================================
+// CALENDAR HEATMAP
+// =============================================================================
+
+async function showCalendarHeatmap(origin, destination) {
+    const milesProgram = document.getElementById('miles-program')?.value || 'qantas';
+    const startDate = document.getElementById('start-date')?.value || new Date().toISOString().slice(0, 10);
+    const endDateRaw = document.getElementById('end-date')?.value;
+
+    // Default to 30 days from start
+    const sd = new Date(startDate);
+    const ed = endDateRaw ? new Date(endDateRaw) : new Date(sd.getTime() + 30 * 86400000);
+    const endDate = ed.toISOString().slice(0, 10);
+
+    const sidebar = document.getElementById('flight-sidebar');
+    const flightList = DOM.flightList || document.getElementById('flight-list');
+    if (!flightList) return;
+    sidebar?.classList.add('open');
+
+    flightList.innerHTML = `
+        <div style="padding: 1rem; text-align: center;">
+            <div class="loading-spinner" style="margin: 0 auto 8px; width: 32px; height: 32px;"></div>
+            <div style="font-size: 0.85rem; color: var(--color-text-light);">Loading calendar for ${origin} → ${destination}...</div>
+        </div>
+    `;
+
+    try {
+        const resp = await fetch(`/api/availability-calendar?origin=${origin}&destination=${destination}&start_date=${startDate}&end_date=${endDate}&source=${milesProgram}`);
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+
+        renderCalendar(origin, destination, data.days, sd, ed);
+    } catch (err) {
+        showError('Failed to load calendar');
+    }
+}
+
+function renderCalendar(origin, destination, dayCounts, startDate, endDate) {
+    const flightList = DOM.flightList || document.getElementById('flight-list');
+    if (!flightList) return;
+
+    const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    // Iterate month by month
+    let html = `
+        <div class="calendar-heatmap-header">
+            <h4>${origin} → ${destination}</h4>
+            <button onclick="backToFlightList()" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">← Back to flights</button>
+        </div>
+        <div class="calendar-legend">
+            <span class="cal-legend-item"><span class="cal-cell cal-none" style="display:inline-block;width:16px;height:16px;"></span> None</span>
+            <span class="cal-legend-item"><span class="cal-cell cal-low" style="display:inline-block;width:16px;height:16px;"></span> 1</span>
+            <span class="cal-legend-item"><span class="cal-cell cal-med" style="display:inline-block;width:16px;height:16px;"></span> 2-3</span>
+            <span class="cal-legend-item"><span class="cal-cell cal-high" style="display:inline-block;width:16px;height:16px;"></span> 4+</span>
+        </div>
+    `;
+
+    // Build months
+    const current = new Date(startDate);
+    current.setDate(1); // Start from 1st of month
+    const end = new Date(endDate);
+
+    while (current <= end) {
+        const year = current.getFullYear();
+        const month = current.getMonth();
+        const monthName = current.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const firstDay = new Date(year, month, 1).getDay();
+
+        html += `<div class="cal-month"><div class="cal-month-title">${monthName}</div>`;
+        html += `<div class="cal-grid">`;
+        // Day headers
+        DAYS.forEach(d => { html += `<div class="cal-day-header">${d}</div>`; });
+        // Empty cells before first day
+        for (let i = 0; i < firstDay; i++) html += `<div class="cal-cell cal-empty"></div>`;
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dateObj = new Date(year, month, d);
+            const info = dayCounts[dateStr];
+            const total = info ? info.total : 0;
+            const inRange = dateObj >= startDate && dateObj <= end;
+
+            let cls = 'cal-none';
+            if (total >= 4) cls = 'cal-high';
+            else if (total >= 2) cls = 'cal-med';
+            else if (total >= 1) cls = 'cal-low';
+
+            const tooltip = info
+                ? `${dateStr}\nBusiness: ${info.business}, Premium: ${info.premium}, Economy: ${info.economy}`
+                : `${dateStr}\nNo availability`;
+
+            const opacity = inRange ? '' : 'opacity: 0.3;';
+            html += `<div class="cal-cell ${cls}" title="${tooltip}" style="${opacity}" data-date="${dateStr}">${d}</div>`;
+        }
+
+        html += `</div></div>`;
+        current.setMonth(current.getMonth() + 1);
+    }
+
+    flightList.innerHTML = html;
+
+    // Make calendar cells clickable to search that specific date
+    flightList.querySelectorAll('.cal-cell[data-date]').forEach(cell => {
+        cell.addEventListener('click', () => {
+            const date = cell.dataset.date;
+            loadFlightsFromAirport(origin, date);
+        });
+    });
+}
+
+function backToFlightList() {
+    if (AppState.currentOrigin && AppState.currentDate) {
+        loadFlightsFromAirport(AppState.currentOrigin, AppState.currentDate);
+    }
+}
+
+// =============================================================================
+// VIRTUAL SCROLLING FOR FLIGHT LIST
+// =============================================================================
+
+const VirtualScroll = (() => {
+    const ITEM_HEIGHT = 110; // approximate height of a flight card in px
+    const BUFFER = 5; // extra items above/below viewport
+    let container = null;
+    let allItems = [];
+    let headerHTML = '';
+    let scrollHandler = null;
+
+    function init(flights, header, direction, targetDateRange) {
+        container = DOM.flightList || document.getElementById('flight-list');
+        if (!container || flights.length <= 30) {
+            // Below threshold, render all items directly (no virtual scrolling needed)
+            return false;
+        }
+
+        allItems = flights;
+        headerHTML = header;
+
+        // Pre-build all item HTML strings (lightweight, just strings — not DOM nodes)
+        const itemHTMLs = flights.map((flight, index) => buildFlightItemHTML(flight, index, direction, targetDateRange));
+
+        const totalHeight = flights.length * ITEM_HEIGHT;
+
+        container.innerHTML = `
+            ${headerHTML}
+            <div class="virtual-scroll-info" style="padding: 0.5rem; font-size: 0.8rem; color: var(--color-text-muted); text-align: center;">
+                ${flights.length} flights — scroll to see more
+            </div>
+            <div class="virtual-scroll-container" style="position: relative; height: ${totalHeight}px; overflow: visible;">
+                <div class="virtual-scroll-items"></div>
+            </div>
+        `;
+
+        const itemsContainer = container.querySelector('.virtual-scroll-items');
+
+        // Remove old scroll handler if any
+        if (scrollHandler) {
+            container.closest('.sidebar-content')?.removeEventListener('scroll', scrollHandler);
+        }
+
+        const scrollParent = container.closest('.sidebar-content') || container;
+
+        scrollHandler = () => {
+            const scrollTop = scrollParent.scrollTop;
+            const viewportHeight = scrollParent.clientHeight;
+
+            const startIdx = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER);
+            const endIdx = Math.min(flights.length, Math.ceil((scrollTop + viewportHeight) / ITEM_HEIGHT) + BUFFER);
+
+            let html = '';
+            for (let i = startIdx; i < endIdx; i++) {
+                html += `<div style="position: absolute; top: ${i * ITEM_HEIGHT}px; left: 0; right: 0;">${itemHTMLs[i]}</div>`;
+            }
+            itemsContainer.innerHTML = html;
+        };
+
+        scrollParent.addEventListener('scroll', scrollHandler, { passive: true });
+        scrollHandler(); // initial render
+
+        return true;
+    }
+
+    function cleanup() {
+        if (scrollHandler) {
+            const container = DOM.flightList || document.getElementById('flight-list');
+            const scrollParent = container?.closest('.sidebar-content') || container;
+            scrollParent?.removeEventListener('scroll', scrollHandler);
+            scrollHandler = null;
+        }
+        allItems = [];
+    }
+
+    return { init, cleanup };
+})();
+
+function buildFlightItemHTML(flight, index, direction, targetDateRange) {
+    const hasBusiness = flight.business_miles_int > 0;
+    const hasPremium = flight.premium_economy_miles_int > 0;
+    const hasEconomy = flight.economy_miles_int > 0;
+
+    let cabinClass, miles, carriers;
+    if (hasBusiness) { cabinClass = 'Business'; miles = flight.business_miles; carriers = flight.business_carriers; }
+    else if (hasPremium) { cabinClass = 'Premium Economy'; miles = flight.premium_economy_miles; carriers = flight.premium_economy_carriers; }
+    else { cabinClass = 'Economy'; miles = flight.economy_miles; carriers = flight.economy_carriers; }
+
+    const availableClasses = [];
+    if (hasBusiness) availableClasses.push('Business');
+    if (hasPremium) availableClasses.push('Premium');
+    if (hasEconomy) availableClasses.push('Economy');
+    const classesDisplay = availableClasses.length > 1 ? ` (${availableClasses.join(', ')})` : '';
+
+    const checkCity = direction === 'backward' ? flight.origin : flight.destination;
+    const isMustVisit = AppState.mustVisitCities.includes(checkCity);
+    const mustVisitBadge = isMustVisit ? '<span class="flight-badge" style="background: #FF6B6B; color: white;">Must Visit</span>' : '';
+
+    let isWithinRange = false;
+    if (targetDateRange) {
+        const flightDate = new Date(flight.date);
+        isWithinRange = flightDate >= targetDateRange.start && flightDate <= targetDateRange.end;
+    }
+    const borderStyle = isWithinRange ? 'border: 3px solid #4CAF50;' : '';
+    const rangeIndicator = isWithinRange ? '<span style="color: #4CAF50; font-size: 0.75rem; margin-left: 0.5rem;">✓ In Range</span>' : '';
+
+    const escapedBusinessCarriers = (flight.business_carriers || '').replace(/'/g, "\\'");
+    const escapedPremiumCarriers = (flight.premium_economy_carriers || '').replace(/'/g, "\\'");
+    const escapedEconomyCarriers = (flight.economy_carriers || '').replace(/'/g, "\\'");
+    const flightIndex = flight._originalIndex !== undefined ? flight._originalIndex : index;
+
+    return `
+        <div class="flight-item"
+             data-flight-index="${flightIndex}"
+             data-origin="${flight.origin}"
+             data-dest="${flight.destination}"
+             style="${borderStyle}"
+             onmouseenter="highlightRoute('${flight.origin}', '${flight.destination}')"
+             onmouseleave="clearHighlight()"
+             onclick="selectFlight(${flightIndex}, '${flight.origin}', '${flight.destination}', '${flight.date}', ${flight.is_direct}, ${flight.num_stops}, ${flight.business_miles_int || 0}, ${flight.premium_economy_miles_int || 0}, ${flight.economy_miles_int || 0}, '${escapedBusinessCarriers}', '${escapedPremiumCarriers}', '${escapedEconomyCarriers}')">
+            <div class="flight-header">
+                <div>
+                    <span class="flight-route">${flight.origin} → ${flight.destination} ${mustVisitBadge}${rangeIndicator}</span>
+                    <div class="flight-date">${formatDate(flight.date)}</div>
+                </div>
+                <div>
+                    ${flight.is_direct ? '<span class="flight-badge badge-direct">Direct</span>' : `<span class="flight-badge badge-stops">${flight.num_stops} stop${flight.num_stops > 1 ? 's' : ''}</span>`}
+                    <span class="flight-badge badge-${cabinClass.toLowerCase().replace(' ', '-')}">${cabinClass}${classesDisplay}</span>
+                </div>
+            </div>
+            <div class="flight-details">
+                ${flight.origin_name || flight.origin} → ${flight.destination_name || flight.destination}<br>
+                ${miles ? `${parseInt(miles).toLocaleString()} miles` : 'N/A'}
+                <button onclick="event.stopPropagation(); showCalendarHeatmap('${flight.origin}', '${flight.destination}')" class="cal-btn" title="View availability calendar">📅</button><br>
+                <strong style="color: var(--color-primary);">Airlines:</strong> ${carriers || 'N/A'}
+            </div>
+        </div>
+    `;
+}
+
+// =============================================================================
+// DRAG-TO-REORDER TRIP SEGMENTS
+// =============================================================================
+
+const SegmentDrag = (() => {
+    let dragIdx = null;
+    let placeholder = null;
+
+    function init() {
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        if (!summaryDiv) return;
+
+        summaryDiv.addEventListener('dragstart', onDragStart);
+        summaryDiv.addEventListener('dragover', onDragOver);
+        summaryDiv.addEventListener('dragend', onDragEnd);
+        summaryDiv.addEventListener('drop', onDrop);
+
+        // Touch support
+        summaryDiv.addEventListener('touchstart', onTouchStart, { passive: false });
+        summaryDiv.addEventListener('touchmove', onTouchMove, { passive: false });
+        summaryDiv.addEventListener('touchend', onTouchEnd);
+    }
+
+    function onDragStart(e) {
+        const seg = e.target.closest('.trip-segment[data-segment-index]');
+        if (!seg) return;
+        dragIdx = parseInt(seg.dataset.segmentIndex);
+        seg.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragIdx);
+    }
+
+    function onDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const target = e.target.closest('.trip-segment[data-segment-index]');
+        if (!target) return;
+
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        // Remove existing drop indicators
+        summaryDiv.querySelectorAll('.trip-segment').forEach(s => s.classList.remove('drag-over'));
+        target.classList.add('drag-over');
+    }
+
+    function onDrop(e) {
+        e.preventDefault();
+        const target = e.target.closest('.trip-segment[data-segment-index]');
+        if (!target || dragIdx === null) return;
+
+        const dropIdx = parseInt(target.dataset.segmentIndex);
+        if (dropIdx !== dragIdx) {
+            reorderSegments(dragIdx, dropIdx);
+        }
+        onDragEnd(e);
+    }
+
+    function onDragEnd(e) {
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        summaryDiv?.querySelectorAll('.trip-segment').forEach(s => {
+            s.classList.remove('dragging', 'drag-over');
+        });
+        dragIdx = null;
+    }
+
+    // Touch drag support
+    let touchStartY = 0;
+    let touchElement = null;
+
+    function onTouchStart(e) {
+        const seg = e.target.closest('.trip-segment[data-segment-index]');
+        if (!seg) return;
+
+        // Only start drag on the segment header area (not buttons)
+        if (e.target.closest('button')) return;
+
+        dragIdx = parseInt(seg.dataset.segmentIndex);
+        touchStartY = e.touches[0].clientY;
+        touchElement = seg;
+
+        // Long-press to initiate drag
+        seg._touchTimer = setTimeout(() => {
+            seg.classList.add('dragging');
+            e.preventDefault();
+        }, 300);
+    }
+
+    function onTouchMove(e) {
+        if (dragIdx === null || !touchElement?.classList.contains('dragging')) {
+            if (touchElement?._touchTimer) clearTimeout(touchElement._touchTimer);
+            return;
+        }
+        e.preventDefault();
+
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.trip-segment[data-segment-index]');
+
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        summaryDiv?.querySelectorAll('.trip-segment').forEach(s => s.classList.remove('drag-over'));
+        if (target && target !== touchElement) {
+            target.classList.add('drag-over');
+        }
+    }
+
+    function onTouchEnd(e) {
+        if (touchElement?._touchTimer) clearTimeout(touchElement._touchTimer);
+
+        if (dragIdx !== null && touchElement?.classList.contains('dragging')) {
+            const touch = e.changedTouches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.trip-segment[data-segment-index]');
+            if (target) {
+                const dropIdx = parseInt(target.dataset.segmentIndex);
+                if (dropIdx !== dragIdx) {
+                    reorderSegments(dragIdx, dropIdx);
+                }
+            }
+        }
+
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        summaryDiv?.querySelectorAll('.trip-segment').forEach(s => {
+            s.classList.remove('dragging', 'drag-over');
+        });
+        dragIdx = null;
+        touchElement = null;
+    }
+
+    return { init };
+})();
+
+function reorderSegments(fromIdx, toIdx) {
+    UndoRedo.pushUndo();
+
+    const segments = AppState.selectedSegments;
+    const [moved] = segments.splice(fromIdx, 1);
+    segments.splice(toIdx, 0, moved);
+
+    // Renumber
+    segments.forEach((seg, i) => seg.segment = i + 1);
+    window.selectedSegments = segments;
+
+    redrawSelectedRoutes(false);
+    updateTripSummary();
+    updateProgressBar();
+    updateButtons();
+    TripStorage.save();
+}
+
+// =============================================================================
 // GLOBAL EXPORTS
 // =============================================================================
 
@@ -2878,6 +3294,9 @@ window.exportTrip = exportTrip;
 window.importTrip = importTrip;
 window.redoLast = redoLast;
 window.shareTrip = () => TripShare.shareTrip();
+window.showCalendarHeatmap = showCalendarHeatmap;
+window.backToFlightList = backToFlightList;
+window.reorderSegments = reorderSegments;
 
 // =============================================================================
 // TABLE VIEW FUNCTIONALITY
