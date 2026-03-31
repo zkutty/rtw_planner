@@ -374,6 +374,12 @@ def logout():
     return redirect(url_for('login'))
 
 
+@app.route('/sw.js')
+def service_worker():
+    """Serve the service worker from the root scope"""
+    return app.send_static_file('sw.js'), 200, {'Content-Type': 'application/javascript', 'Service-Worker-Allowed': '/'}
+
+
 @app.route('/')
 @password_required
 def index():

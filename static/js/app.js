@@ -435,6 +435,44 @@ function showConfirm(message) {
     });
 }
 
+// =============================================================================
+// GLOBAL ERROR BOUNDARY
+// Catches unhandled JS errors and promise rejections, shows user-friendly toasts
+// instead of silent failures, and prevents cascading UI breakage.
+// =============================================================================
+
+window.addEventListener('error', (event) => {
+    // Ignore script loading errors (e.g. ad blockers, CDN failures)
+    if (event.target && (event.target.tagName === 'SCRIPT' || event.target.tagName === 'LINK')) return;
+
+    console.error('[Error Boundary]', event.error || event.message);
+    showError('Something went wrong. Please try again.');
+
+    // Ensure loading states are reset so the UI isn't stuck
+    AppState.isLoadingFlights = false;
+    AppState.isSelectingFlight = false;
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'none';
+    const loadBtn = document.getElementById('load-flights-btn');
+    if (loadBtn) { loadBtn.disabled = false; loadBtn.textContent = 'Load Flights'; }
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    // Ignore AbortError (expected when cancelling fetch requests)
+    if (event.reason?.name === 'AbortError') return;
+
+    console.error('[Unhandled Promise]', event.reason);
+    showError('A network or processing error occurred.');
+
+    // Reset loading states
+    AppState.isLoadingFlights = false;
+    AppState.isSelectingFlight = false;
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'none';
+    const loadBtn = document.getElementById('load-flights-btn');
+    if (loadBtn) { loadBtn.disabled = false; loadBtn.textContent = 'Load Flights'; }
+});
+
 /**
  * Get airport coordinates (with caching and in-flight request deduplication)
  */
@@ -557,49 +595,64 @@ function clearMap() {
 // ROUTE VISUALIZATION
 // =============================================================================
 
-async function redrawSelectedRoutes() {
+async function redrawSelectedRoutes(animate = true) {
     // Remove existing route lines
     AppState.selectedRouteLines.forEach(({ line }) => AppState.map.removeLayer(line));
     AppState.selectedRouteLines = [];
-    
+
     if (AppState.selectedSegments.length === 0) return;
-    
+
     // Get all airport coordinates
     const airports = new Set();
     AppState.selectedSegments.forEach(seg => {
         airports.add(seg.origin);
         airports.add(seg.destination);
     });
-    
+
     try {
         const coords = await getAirportCoords([...airports]);
-        const allWaypoints = [];
-        
-        for (let i = 0; i < AppState.selectedSegments.length; i++) {
+
+        // Draw completed segments (all but the last) as a solid line
+        const completedWaypoints = [];
+        for (let i = 0; i < AppState.selectedSegments.length - 1; i++) {
             const seg = AppState.selectedSegments[i];
             if (!coords[seg.origin] || !coords[seg.destination]) continue;
-            
             const originCoords = [coords[seg.origin].lat, coords[seg.origin].lon];
             const destCoords = [coords[seg.destination].lat, coords[seg.destination].lon];
             const segmentPath = getGreatCirclePath(originCoords, destCoords);
-            
-            if (i === 0) {
-                allWaypoints.push(...segmentPath);
-            } else {
-                allWaypoints.push(...segmentPath.slice(1));
-            }
+            if (i === 0) completedWaypoints.push(...segmentPath);
+            else completedWaypoints.push(...segmentPath.slice(1));
         }
-        
-        if (allWaypoints.length > 0) {
-            const continuousLine = L.polyline(allWaypoints, {
+
+        if (completedWaypoints.length > 0) {
+            const completedLine = L.polyline(completedWaypoints, {
                 color: '#667eea',
                 weight: 4,
                 opacity: 0.8
             }).addTo(AppState.map);
-            
-            AppState.selectedRouteLines.push({ 
-                line: continuousLine, 
-                segment: AppState.selectedSegments[AppState.selectedSegments.length - 1] 
+            AppState.selectedRouteLines.push({
+                line: completedLine,
+                segment: AppState.selectedSegments[AppState.selectedSegments.length - 2]
+            });
+        }
+
+        // Draw the latest segment (animate if requested)
+        const lastSeg = AppState.selectedSegments[AppState.selectedSegments.length - 1];
+        if (coords[lastSeg.origin] && coords[lastSeg.destination]) {
+            const originCoords = [coords[lastSeg.origin].lat, coords[lastSeg.origin].lon];
+            const destCoords = [coords[lastSeg.destination].lat, coords[lastSeg.destination].lon];
+            const lastPath = getGreatCirclePath(originCoords, destCoords);
+
+            const lastLine = L.polyline(lastPath, {
+                color: '#667eea',
+                weight: 4,
+                opacity: 0.8,
+                className: animate ? 'animated-route' : ''
+            }).addTo(AppState.map);
+
+            AppState.selectedRouteLines.push({
+                line: lastLine,
+                segment: lastSeg
             });
         }
     } catch (error) {
@@ -720,6 +773,9 @@ async function loadFlightsFromAirport(origin, date) {
     // IMPORTANT: Clear old markers immediately to prevent stale data from showing
     clearFlightMarkers();
     AppState.currentFlights = [];
+
+    // Show skeleton placeholders in the flight sidebar
+    showFlightSkeletons(origin);
     
     try {
         AppState.currentOrigin = origin;
@@ -935,6 +991,39 @@ async function loadFlightsFromAirport(origin, date) {
         }
         AppState.isLoadingFlights = false;
     }
+}
+
+function showFlightSkeletons(origin) {
+    const sidebar = document.getElementById('flight-sidebar');
+    const flightList = DOM.flightList || document.getElementById('flight-list');
+    if (!flightList) return;
+
+    sidebar?.classList.add('open');
+
+    const skeletonCards = Array.from({ length: 5 }, () => `
+        <div class="flight-item skeleton-card">
+            <div class="flight-header">
+                <div><div class="skeleton-line" style="width: 140px; height: 16px;"></div>
+                     <div class="skeleton-line" style="width: 100px; height: 12px; margin-top: 6px;"></div></div>
+                <div style="display: flex; gap: 6px;">
+                    <div class="skeleton-line" style="width: 50px; height: 20px; border-radius: 12px;"></div>
+                    <div class="skeleton-line" style="width: 70px; height: 20px; border-radius: 12px;"></div>
+                </div>
+            </div>
+            <div class="flight-details" style="margin-top: 8px;">
+                <div class="skeleton-line" style="width: 200px; height: 12px;"></div>
+                <div class="skeleton-line" style="width: 120px; height: 12px; margin-top: 4px;"></div>
+                <div class="skeleton-line" style="width: 160px; height: 12px; margin-top: 4px;"></div>
+            </div>
+        </div>
+    `).join('');
+
+    flightList.innerHTML = `
+        <div style="padding: 0.5rem; font-size: 0.85rem; color: var(--color-text-light); text-align: center;">
+            Loading flights from <strong>${origin}</strong>...
+        </div>
+        ${skeletonCards}
+    `;
 }
 
 function displayFlights(flights, origin, keepSidebarOpen = false, direction = 'forward', targetDateRange = null) {
@@ -1973,6 +2062,7 @@ function updateButtons() {
     const validateBtn = document.getElementById('validate-btn');
     const copyBtn = document.getElementById('copy-trip-btn');
     const exportBtn = document.getElementById('export-trip-btn');
+    const shareBtn = document.getElementById('share-trip-btn');
 
     const hasSegments = AppState.selectedSegments.length > 0;
 
@@ -1989,6 +2079,10 @@ function updateButtons() {
     if (exportBtn) {
         exportBtn.disabled = !hasSegments;
         exportBtn.style.opacity = hasSegments ? '1' : '0.5';
+    }
+    if (shareBtn) {
+        shareBtn.disabled = !hasSegments;
+        shareBtn.style.opacity = hasSegments ? '1' : '0.5';
     }
     UndoRedo._updateButtons();
 }
@@ -2243,16 +2337,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btn) { const orig = btn.textContent; btn.textContent = '✓ Saved!'; setTimeout(() => btn.textContent = orig, 1500); }
     });
     document.getElementById('export-trip-btn')?.addEventListener('click', exportTrip);
+    document.getElementById('share-trip-btn')?.addEventListener('click', () => TripShare.shareTrip());
     document.getElementById('import-trip-input')?.addEventListener('change', (e) => {
         if (e.target.files[0]) importTrip(e.target.files[0]);
         e.target.value = '';
     });
 
-    // Restore saved trip from localStorage (if any)
-    const restored = TripStorage.restore();
-    if (restored) {
+    // Check for shared trip in URL hash first, then localStorage
+    TripShare.loadFromURL().then(fromURL => {
+        if (!fromURL) {
+            TripStorage.restore();
+        }
         updateProgressBar();
-    }
+    });
 
     // Table view initialization
     initTableView();
@@ -2336,6 +2433,111 @@ const TripStorage = (() => {
     }
 
     return { save, load, clear, restore };
+})();
+
+// =============================================================================
+// TRIP SHARING VIA URL
+// =============================================================================
+
+const TripShare = (() => {
+    /**
+     * Encode the current trip into a compact URL hash.
+     * Format: each segment is "ORIG-DEST-DATE-CABIN" joined by "~"
+     * e.g. #trip=JFK-LHR-2026-04-01-B~LHR-SIN-2026-04-05-P
+     */
+    function encode(segments) {
+        if (!segments || segments.length === 0) return '';
+        const parts = segments.map(seg => {
+            const cabin = seg.cabin_class === 'Business' ? 'B'
+                : seg.cabin_class === 'Premium Economy' ? 'W' : 'Y';
+            return `${seg.origin}-${seg.destination}-${seg.date}-${cabin}`;
+        });
+        return parts.join('~');
+    }
+
+    function decode(hash) {
+        if (!hash) return null;
+        const raw = hash.replace(/^#?trip=/, '');
+        if (!raw) return null;
+        const parts = raw.split('~');
+        const segments = [];
+        for (const part of parts) {
+            // Format: ORIG-DEST-YYYY-MM-DD-CABIN
+            const m = part.match(/^([A-Z]{3})-([A-Z]{3})-(\d{4}-\d{2}-\d{2})-([BWY])$/);
+            if (!m) return null; // invalid format
+            const cabinMap = { B: 'Business', W: 'Premium Economy', Y: 'Economy' };
+            segments.push({
+                segment: segments.length + 1,
+                origin: m[1],
+                destination: m[2],
+                date: m[3],
+                cabin_class: cabinMap[m[4]],
+                is_direct: false,
+                num_stops: 0,
+                business_miles_int: m[4] === 'B' ? 1 : 0,
+                premium_economy_miles_int: m[4] === 'W' ? 1 : 0,
+                economy_miles_int: m[4] === 'Y' ? 1 : 0,
+                business_carriers: '',
+                premium_economy_carriers: '',
+                economy_carriers: '',
+                distance_miles: 0 // will be recalculated on load
+            });
+        }
+        return segments;
+    }
+
+    async function shareTrip() {
+        if (AppState.selectedSegments.length === 0) {
+            showError('No trip to share');
+            return;
+        }
+        const encoded = encode(AppState.selectedSegments);
+        const url = `${window.location.origin}${window.location.pathname}#trip=${encoded}`;
+
+        try {
+            await navigator.clipboard.writeText(url);
+            showError('Share link copied to clipboard!');
+        } catch {
+            // Fallback: show URL in prompt
+            prompt('Copy this link to share your trip:', url);
+        }
+    }
+
+    async function loadFromURL() {
+        const hash = window.location.hash;
+        if (!hash || !hash.startsWith('#trip=')) return false;
+
+        const segments = decode(hash);
+        if (!segments || segments.length === 0) return false;
+
+        // Recalculate distances
+        const airports = new Set();
+        segments.forEach(s => { airports.add(s.origin); airports.add(s.destination); });
+        try {
+            const coords = await getAirportCoords([...airports]);
+            for (const seg of segments) {
+                if (coords[seg.origin] && coords[seg.destination]) {
+                    const o = [coords[seg.origin].lat, coords[seg.origin].lon];
+                    const d = [coords[seg.destination].lat, coords[seg.destination].lon];
+                    seg.distance_miles = calculateDistance(o, d);
+                }
+            }
+        } catch { /* distances stay 0 */ }
+
+        AppState.selectedSegments = segments;
+        window.selectedSegments = segments;
+        redrawSelectedRoutes();
+        updateTripSummary();
+        updateProgressBar();
+        updateButtons();
+        TripStorage.save();
+
+        // Clean hash from URL without triggering reload
+        history.replaceState(null, '', window.location.pathname);
+        return true;
+    }
+
+    return { shareTrip, loadFromURL, encode, decode };
 })();
 
 function exportTrip() {
@@ -2545,6 +2747,7 @@ window.clearTableFilters = clearTableFilters;
 window.exportTrip = exportTrip;
 window.importTrip = importTrip;
 window.redoLast = redoLast;
+window.shareTrip = () => TripShare.shareTrip();
 
 // =============================================================================
 // TABLE VIEW FUNCTIONALITY

@@ -220,6 +220,7 @@
                         <button id="redo-btn" class="btn btn-secondary" disabled title="Redo (Ctrl+Y)" style="opacity: 0.5;">Redo →</button>
                         <button id="clear-btn" class="btn btn-secondary" disabled>Clear All</button>
                         <button id="copy-trip-btn" class="btn btn-secondary" disabled>📋 Copy</button>
+                        <button id="share-trip-btn" class="btn btn-secondary" disabled>🔗 Share</button>
                         <button id="export-trip-btn" class="btn btn-secondary" disabled>💾 Export</button>
                         <label class="btn btn-secondary" style="margin: 0; cursor: pointer;">📂 Import<input id="import-trip-input" type="file" accept=".json" style="display: none;"></label>
                         <button id="validate-btn" class="btn btn-primary" disabled>Validate Trip</button>
@@ -423,6 +424,13 @@
     
     <!-- Panel Overlay (for mobile) -->
     <div class="panel-overlay" id="panel-overlay"></div>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+        }
+    </script>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
