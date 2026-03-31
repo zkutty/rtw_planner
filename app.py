@@ -8,6 +8,7 @@ from flask_cors import CORS
 from flask_compress import Compress
 from functools import wraps
 import os
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -195,6 +196,52 @@ def filter_by_cabin_class(flights: list, cabin_class: str) -> list:
         elif cabin_class == 'economy' and flight.get('economy_miles_int', 0) > 0:
             filtered.append(flight)
     return filtered
+
+
+# ============================================================================
+# INPUT VALIDATION HELPERS
+# ============================================================================
+
+_AIRPORT_CODE_RE = re.compile(r'^[A-Z]{3}$')
+_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def _validate_airport(code: str, field_name: str = 'airport') -> str:
+    """Validate and return an uppercase airport code, or raise ValueError."""
+    code = (code or '').strip().upper()
+    if not _AIRPORT_CODE_RE.match(code):
+        raise ValueError(f"Invalid {field_name}: expected a 3-letter IATA airport code")
+    return code
+
+
+def _validate_date(date_str: str, field_name: str = 'date') -> str:
+    """Validate a YYYY-MM-DD date string, or raise ValueError."""
+    date_str = (date_str or '').strip()
+    if not _DATE_RE.match(date_str):
+        raise ValueError(f"Invalid {field_name}: expected YYYY-MM-DD format")
+    # Ensure it's a real date
+    try:
+        datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+        raise ValueError(f"Invalid {field_name}: not a valid calendar date")
+    return date_str
+
+
+def _validate_int(value, field_name: str, min_val: int = None, max_val: int = None, default: int = None) -> int:
+    """Validate and return an integer from a string value."""
+    if value is None or value == '':
+        if default is not None:
+            return default
+        raise ValueError(f"{field_name} is required")
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"Invalid {field_name}: expected an integer")
+    if min_val is not None and v < min_val:
+        raise ValueError(f"{field_name} must be at least {min_val}")
+    if max_val is not None and v > max_val:
+        raise ValueError(f"{field_name} must be at most {max_val}")
+    return v
 
 
 # ============================================================================
@@ -389,18 +436,19 @@ def get_flights():
     """Get available flights from an airport"""
     if not data_source:
         return jsonify({'error': 'Not initialized'}), 500
-    
-    origin = request.args.get('origin', '').upper()
-    target_date = request.args.get('date', '')
-    date_range = int(request.args.get('date_range', 2))
-    cabin_class = request.args.get('cabin_class', None)
-    miles_program = request.args.get('source', 'qantas')  # Miles program source
-    end_date = request.args.get('end_date', None)  # Trip end date for connectivity check
-    days_to_stay = int(request.args.get('days_to_stay', 3))  # Days at destination
-    
-    if not origin or not target_date:
-        return jsonify({'error': 'Origin and date required'}), 400
-    
+
+    try:
+        origin = _validate_airport(request.args.get('origin', ''), 'origin')
+        target_date = _validate_date(request.args.get('date', ''), 'date')
+        date_range = _validate_int(request.args.get('date_range'), 'date_range', min_val=0, max_val=30, default=2)
+        cabin_class = request.args.get('cabin_class', None)
+        miles_program = request.args.get('source', 'qantas')
+        end_date_raw = request.args.get('end_date', None)
+        end_date = _validate_date(end_date_raw, 'end_date') if end_date_raw else None
+        days_to_stay = _validate_int(request.args.get('days_to_stay'), 'days_to_stay', min_val=0, max_val=365, default=3)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
     try:
         # Pass source to API if using the API, otherwise ignore for database
         if _using_api:
@@ -432,18 +480,19 @@ def get_flights_to():
     """Get available flights TO an airport"""
     if not data_source:
         return jsonify({'error': 'Not initialized'}), 500
-    
-    destination = request.args.get('destination', '').upper()
-    target_date = request.args.get('date', '')
-    date_range = int(request.args.get('date_range', 2))
-    cabin_class = request.args.get('cabin_class', None)
-    miles_program = request.args.get('source', 'qantas')  # Miles program source
-    start_date = request.args.get('start_date', None)  # Trip start date for connectivity check
-    days_to_stay = int(request.args.get('days_to_stay', 3))  # Days at origin before this flight
-    
-    if not destination or not target_date:
-        return jsonify({'error': 'Destination and date required'}), 400
-    
+
+    try:
+        destination = _validate_airport(request.args.get('destination', ''), 'destination')
+        target_date = _validate_date(request.args.get('date', ''), 'date')
+        date_range = _validate_int(request.args.get('date_range'), 'date_range', min_val=0, max_val=30, default=2)
+        cabin_class = request.args.get('cabin_class', None)
+        miles_program = request.args.get('source', 'qantas')
+        start_date_raw = request.args.get('start_date', None)
+        start_date = _validate_date(start_date_raw, 'start_date') if start_date_raw else None
+        days_to_stay = _validate_int(request.args.get('days_to_stay'), 'days_to_stay', min_val=0, max_val=365, default=3)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
     try:
         # Pass source to API if using the API, otherwise ignore for database
         if _using_api:
@@ -476,10 +525,11 @@ def get_nearby_airports():
     if not planner_coords:
         return jsonify({'error': 'Not initialized'}), 500
     
-    airport = request.args.get('airport', '').upper()
-    if not airport:
-        return jsonify({'error': 'Airport code required'}), 400
-    
+    try:
+        airport = _validate_airport(request.args.get('airport', ''), 'airport')
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
     try:
         nearby = planner_coords.get_nearby_airports(airport, max_results=5)
         formatted = [{'code': code, 'distance': round(distance), 'name': city_name}
@@ -646,12 +696,12 @@ def airport_has_flights():
     if not data_source:
         return jsonify({'error': 'Not initialized'}), 500
     
-    airport = request.args.get('airport', '').upper()
-    start_date = request.args.get('start_date', '')
-    
-    if not airport or not start_date:
-        return jsonify({'error': 'Airport and start_date required'}), 400
-    
+    try:
+        airport = _validate_airport(request.args.get('airport', ''), 'airport')
+        start_date = _validate_date(request.args.get('start_date', ''), 'start_date')
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
     try:
         has_flights = data_source.airport_has_flights(airport, start_date)
         return cached_json({'airport': airport, 'has_flights': has_flights}, max_age=60)

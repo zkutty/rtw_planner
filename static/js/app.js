@@ -1488,6 +1488,9 @@ async function selectFlight(index, origin, destination, date, isDirect, numStops
             distance_miles: distance
         };
         
+        // Save state for undo before modifying
+        UndoRedo.pushUndo();
+
         // Add segment
         if (AppState.planningDirection === 'backward') {
             AppState.selectedSegments.unshift(segment);
@@ -1495,13 +1498,17 @@ async function selectFlight(index, origin, destination, date, isDirect, numStops
         } else {
             AppState.selectedSegments.push(segment);
         }
-        
+
         // Update global reference
         window.selectedSegments = AppState.selectedSegments;
-        
+
+        // Persist to localStorage
+        TripStorage.save();
+
         // Update UI
         redrawSelectedRoutes();
         updateTripSummary();
+        updateProgressBar();
         updateButtons();
         
         // Update table view if active
@@ -1558,21 +1565,12 @@ function undoLast() {
         updateButtons();
         return;
     }
-    
-    // Remove the last segment
-    const removedSegment = AppState.selectedSegments.pop();
-    window.selectedSegments = AppState.selectedSegments;
-    
-    // Remove route line
-    if (AppState.selectedRouteLines.length > 0) {
-        const lastRoute = AppState.selectedRouteLines.pop();
-        if (lastRoute?.line && AppState.map.hasLayer(lastRoute.line)) {
-            AppState.map.removeLayer(lastRoute.line);
-        }
-    }
-    
+
+    // Use undo/redo stack for full state restoration
+    UndoRedo.undo();
+
     clearHighlight();
-    
+
     // Redraw remaining routes
     if (AppState.selectedSegments.length > 0) {
         redrawSelectedRoutes();
@@ -1582,10 +1580,12 @@ function undoLast() {
         });
         AppState.selectedRouteLines = [];
     }
-    
+
     updateTripSummary();
+    updateProgressBar();
     updateButtons();
-    
+    TripStorage.save();
+
     // Reload flights
     setTimeout(() => {
         if (AppState.selectedSegments.length > 0) {
@@ -1593,27 +1593,24 @@ function undoLast() {
             const planningMode = document.getElementById('planning-mode')?.value || 'days';
             const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
             const isBackward = AppState.planningDirection === 'backward';
-            
+
             let nextFlightDate = lastSeg.date;
             if (planningMode === 'days') {
                 const currentDate = new Date(lastSeg.date);
-                // Backward: subtract days, Forward: add days
                 currentDate.setDate(currentDate.getDate() + (isBackward ? -daysToStay : daysToStay));
                 nextFlightDate = currentDate.toISOString().split('T')[0];
             } else {
                 nextFlightDate = document.getElementById('target-date')?.value || nextFlightDate;
             }
-            
-            // For backward planning, use the origin (where we need to fly FROM)
+
             const nextAirport = isBackward ? lastSeg.origin : lastSeg.destination;
             loadFlightsFromAirport(nextAirport, nextFlightDate);
         } else {
-            // Back to start
             const nextFlightSection = document.getElementById('next-flight-section');
             if (nextFlightSection) nextFlightSection.style.display = 'none';
-            
+
             clearFlightMarkers();
-            
+
             const startDate = document.getElementById('start-date').value;
             if (AppState.startingAirports.length > 0 && startDate) {
                 loadFlightsFromAirport(AppState.startingAirports[0], startDate);
@@ -1622,23 +1619,33 @@ function undoLast() {
     }, 50);
 }
 
+function redoLast() {
+    UndoRedo.redo();
+    TripStorage.save();
+}
+
 async function clearAll() {
     if (AppState.isLoadingFlights || AppState.isSelectingFlight) return;
     if (!(await showConfirm('Clear all segments?'))) return;
-    
+
+    // Save state for undo before clearing
+    UndoRedo.pushUndo();
+
     AppState.selectedSegments = [];
     window.selectedSegments = AppState.selectedSegments;
-    
+
     AppState.selectedRouteLines.forEach(({ line }) => AppState.map.removeLayer(line));
     AppState.selectedRouteLines = [];
-    
+
     const nextFlightSection = document.getElementById('next-flight-section');
     if (nextFlightSection) nextFlightSection.style.display = 'none';
-    
+
     clearMap();
     updateTripSummary();
+    updateProgressBar();
     updateButtons();
-    
+    TripStorage.save();
+
     const startDate = document.getElementById('start-date').value;
     if (AppState.startingAirports.length > 0 && startDate) {
         loadFlightsFromAirport(AppState.startingAirports[0], startDate);
@@ -1659,8 +1666,10 @@ function editSegmentDate(segmentIndex) {
         showError('Invalid date format. Please use YYYY-MM-DD');
         return;
     }
-    
+
+    UndoRedo.pushUndo();
     segment.date = newDate;
+    TripStorage.save();
     redrawSelectedRoutes();
     updateTripSummary();
     
@@ -1803,6 +1812,9 @@ function updateTripSummary() {
         `;
         requirementsDiv.style.display = 'block';
     }
+
+    // Keep progress bar in sync
+    updateProgressBar();
 }
 
 async function copyTripToClipboard() {
@@ -1960,9 +1972,10 @@ function updateButtons() {
     const clearBtn = document.getElementById('clear-btn');
     const validateBtn = document.getElementById('validate-btn');
     const copyBtn = document.getElementById('copy-trip-btn');
-    
+    const exportBtn = document.getElementById('export-trip-btn');
+
     const hasSegments = AppState.selectedSegments.length > 0;
-    
+
     if (undoBtn) {
         undoBtn.disabled = !hasSegments;
         undoBtn.style.opacity = hasSegments ? '1' : '0.5';
@@ -1973,6 +1986,11 @@ function updateButtons() {
         copyBtn.disabled = !hasSegments;
         copyBtn.style.opacity = hasSegments ? '1' : '0.5';
     }
+    if (exportBtn) {
+        exportBtn.disabled = !hasSegments;
+        exportBtn.style.opacity = hasSegments ? '1' : '0.5';
+    }
+    UndoRedo._updateButtons();
 }
 
 async function validateTrip() {
@@ -2199,9 +2217,312 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
+    // Dark mode
+    DarkMode.init();
+    document.getElementById('dark-mode-toggle')?.addEventListener('click', DarkMode.toggle);
+
+    // Redo button
+    document.getElementById('redo-btn')?.addEventListener('click', redoLast);
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y = redo
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            undoLast();
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+            e.preventDefault();
+            redoLast();
+        }
+    });
+
+    // Save/load trip buttons
+    document.getElementById('save-trip-btn')?.addEventListener('click', () => {
+        TripStorage.save();
+        const btn = document.getElementById('save-trip-btn');
+        if (btn) { const orig = btn.textContent; btn.textContent = '✓ Saved!'; setTimeout(() => btn.textContent = orig, 1500); }
+    });
+    document.getElementById('export-trip-btn')?.addEventListener('click', exportTrip);
+    document.getElementById('import-trip-input')?.addEventListener('change', (e) => {
+        if (e.target.files[0]) importTrip(e.target.files[0]);
+        e.target.value = '';
+    });
+
+    // Restore saved trip from localStorage (if any)
+    const restored = TripStorage.restore();
+    if (restored) {
+        updateProgressBar();
+    }
+
     // Table view initialization
     initTableView();
 });
+
+// =============================================================================
+// TRIP PERSISTENCE (localStorage save/load)
+// =============================================================================
+
+const TripStorage = (() => {
+    const STORAGE_KEY = 'rtw_planner_trip';
+    const SETTINGS_KEY = 'rtw_planner_settings';
+
+    function save() {
+        if (AppState.selectedSegments.length === 0) {
+            localStorage.removeItem(STORAGE_KEY);
+            return;
+        }
+        const data = {
+            segments: AppState.selectedSegments,
+            savedAt: new Date().toISOString(),
+            settings: {
+                startingAirports: AppState.startingAirports,
+                startDate: document.getElementById('start-date')?.value,
+                endDate: document.getElementById('end-date')?.value,
+                mustVisitCities: document.getElementById('must-visit-cities')?.value,
+                planningDirection: document.getElementById('planning-direction')?.value,
+                milesProgram: document.getElementById('miles-program')?.value,
+                cabinFilter: document.getElementById('cabin-filter')?.value,
+                dateRange: document.getElementById('date-range')?.value
+            }
+        };
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {
+            console.warn('Failed to save trip to localStorage:', e);
+        }
+    }
+
+    function load() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) {
+            console.warn('Failed to load trip from localStorage:', e);
+            return null;
+        }
+    }
+
+    function clear() {
+        localStorage.removeItem(STORAGE_KEY);
+    }
+
+    function restore() {
+        const data = load();
+        if (!data || !data.segments || data.segments.length === 0) return false;
+
+        // Restore settings first
+        const s = data.settings || {};
+        if (s.startDate) { const el = document.getElementById('start-date'); if (el) el.value = s.startDate; }
+        if (s.endDate) { const el = document.getElementById('end-date'); if (el) el.value = s.endDate; }
+        if (s.mustVisitCities) { const el = document.getElementById('must-visit-cities'); if (el) el.value = s.mustVisitCities; }
+        if (s.planningDirection) { const el = document.getElementById('planning-direction'); if (el) el.value = s.planningDirection; }
+        if (s.milesProgram) { const el = document.getElementById('miles-program'); if (el) el.value = s.milesProgram; }
+        if (s.cabinFilter) { const el = document.getElementById('cabin-filter'); if (el) el.value = s.cabinFilter; }
+        if (s.dateRange) { const el = document.getElementById('date-range'); if (el) el.value = s.dateRange; }
+
+        if (s.startingAirports) AppState.startingAirports = s.startingAirports;
+        if (s.planningDirection) AppState.planningDirection = s.planningDirection;
+
+        // Restore segments
+        AppState.selectedSegments = data.segments;
+        window.selectedSegments = AppState.selectedSegments;
+
+        redrawSelectedRoutes();
+        updateTripSummary();
+        updateProgressBar();
+        updateButtons();
+        return true;
+    }
+
+    return { save, load, clear, restore };
+})();
+
+function exportTrip() {
+    if (AppState.selectedSegments.length === 0) {
+        showError('No trip to export');
+        return;
+    }
+    const data = {
+        segments: AppState.selectedSegments,
+        exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rtw-trip-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importTrip(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!data.segments || !Array.isArray(data.segments) || data.segments.length === 0) {
+                showError('Invalid trip file: no segments found');
+                return;
+            }
+            AppState.selectedSegments = data.segments;
+            window.selectedSegments = AppState.selectedSegments;
+            redrawSelectedRoutes();
+            updateTripSummary();
+            updateProgressBar();
+            updateButtons();
+            TripStorage.save();
+            showError('Trip imported successfully!');
+        } catch (err) {
+            showError('Failed to parse trip file');
+        }
+    };
+    reader.readAsText(file);
+}
+
+// =============================================================================
+// UNDO / REDO STACK
+// =============================================================================
+
+const UndoRedo = (() => {
+    const undoStack = [];
+    const redoStack = [];
+    const MAX_HISTORY = 50;
+
+    function snapshot() {
+        return JSON.parse(JSON.stringify(AppState.selectedSegments));
+    }
+
+    function pushUndo() {
+        undoStack.push(snapshot());
+        if (undoStack.length > MAX_HISTORY) undoStack.shift();
+        // Any new action clears the redo stack
+        redoStack.length = 0;
+        _updateButtons();
+    }
+
+    function undo() {
+        if (undoStack.length === 0) return;
+        redoStack.push(snapshot());
+        const prev = undoStack.pop();
+        _applyState(prev);
+        _updateButtons();
+    }
+
+    function redo() {
+        if (redoStack.length === 0) return;
+        undoStack.push(snapshot());
+        const next = redoStack.pop();
+        _applyState(next);
+        _updateButtons();
+    }
+
+    function _applyState(segments) {
+        AppState.selectedSegments = segments;
+        window.selectedSegments = AppState.selectedSegments;
+        redrawSelectedRoutes();
+        updateTripSummary();
+        updateProgressBar();
+        updateButtons();
+        TripStorage.save();
+    }
+
+    function _updateButtons() {
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        if (undoBtn) {
+            undoBtn.disabled = undoStack.length === 0 && AppState.selectedSegments.length === 0;
+        }
+        if (redoBtn) {
+            redoBtn.disabled = redoStack.length === 0;
+            redoBtn.style.opacity = redoStack.length > 0 ? '1' : '0.5';
+        }
+    }
+
+    function clear() {
+        undoStack.length = 0;
+        redoStack.length = 0;
+        _updateButtons();
+    }
+
+    return { pushUndo, undo, redo, clear, _updateButtons };
+})();
+
+// =============================================================================
+// VISUAL PROGRESS BAR
+// =============================================================================
+
+function updateProgressBar() {
+    const bar = document.getElementById('trip-progress-bar');
+    if (!bar) return;
+
+    const segments = AppState.selectedSegments;
+    if (segments.length === 0) {
+        bar.style.display = 'none';
+        return;
+    }
+    bar.style.display = 'block';
+
+    const validation = RTWValidator.validate(segments);
+    const totalDistance = validation.total_distance_miles;
+    const distancePct = Math.min((totalDistance / 35000) * 100, 100);
+    const segmentPct = Math.min((validation.num_segments / 3) * 100, 100);
+    const continentPct = Math.min((validation.num_continents / 3) * 100, 100);
+
+    // Distance bar
+    const distFill = bar.querySelector('.progress-distance-fill');
+    const distLabel = bar.querySelector('.progress-distance-label');
+    if (distFill) {
+        distFill.style.width = distancePct + '%';
+        distFill.className = 'progress-fill progress-distance-fill' + (totalDistance > 35000 ? ' over-limit' : totalDistance > 33250 ? ' near-limit' : '');
+    }
+    if (distLabel) distLabel.textContent = `${Math.round(totalDistance).toLocaleString()} / 35,000 mi`;
+
+    // Checklist items
+    const items = bar.querySelectorAll('.progress-check');
+    items.forEach(item => {
+        const check = item.dataset.check;
+        let done = false;
+        if (check === 'segments') done = validation.num_segments >= 3;
+        else if (check === 'atlantic') done = validation.atlantic_crossed;
+        else if (check === 'pacific') done = validation.pacific_crossed;
+        else if (check === 'continents') done = validation.num_continents >= 3;
+        else if (check === 'return') done = !validation.errors.some(e => e.includes('return to origin'));
+        item.classList.toggle('done', done);
+    });
+}
+
+// =============================================================================
+// DARK MODE
+// =============================================================================
+
+const DarkMode = (() => {
+    const STORAGE_KEY = 'rtw_planner_dark_mode';
+
+    function isEnabled() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored !== null) return stored === 'true';
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    function apply(enabled) {
+        document.documentElement.classList.toggle('dark', enabled);
+        document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', enabled ? 'dark' : 'light');
+        localStorage.setItem(STORAGE_KEY, String(enabled));
+        const btn = document.getElementById('dark-mode-toggle');
+        if (btn) btn.textContent = enabled ? '☀️' : '🌙';
+    }
+
+    function toggle() {
+        apply(!document.documentElement.classList.contains('dark'));
+    }
+
+    function init() {
+        apply(isEnabled());
+    }
+
+    return { init, toggle };
+})();
 
 // =============================================================================
 // GLOBAL EXPORTS
@@ -2221,6 +2542,9 @@ window.filterByDestination = filterByDestination;
 window.clearDestinationFilter = clearDestinationFilter;
 window.editSegmentDate = editSegmentDate;
 window.clearTableFilters = clearTableFilters;
+window.exportTrip = exportTrip;
+window.importTrip = importTrip;
+window.redoLast = redoLast;
 
 // =============================================================================
 // TABLE VIEW FUNCTIONALITY

@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="color-scheme" content="light">
     <title>Interactive RTW Trip Planner</title>
+    <!-- Prevent flash of wrong theme -->
+    <script>
+        if (localStorage.getItem('rtw_planner_dark_mode') === 'true' ||
+            (localStorage.getItem('rtw_planner_dark_mode') === null && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -17,8 +24,9 @@
         <header>
             <h1>🌍 Round-the-World Trip Planner</h1>
             <p class="subtitle">oneworld Alliance • Interactive Map Planner</p>
-            <div style="text-align: center; margin-top: 0.5rem;">
-                <a href="/suggestions" style="color: #667eea; text-decoration: none; font-weight: 500;">🔍 Try Trip Suggestions</a>
+            <div style="text-align: center; margin-top: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
+                <a href="/suggestions" style="color: #fff; text-decoration: none; font-weight: 500; opacity: 0.9;">🔍 Trip Suggestions</a>
+                <button id="dark-mode-toggle" title="Toggle dark mode" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; color: white; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 1rem; transition: background 0.2s;">🌙</button>
             </div>
             <!-- Tab Navigation -->
             <div class="tab-navigation" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; border-bottom: 2px solid rgba(255,255,255,0.2);">
@@ -179,6 +187,21 @@
             </button>
             
             <div class="bottom-panel-content">
+                <!-- Progress Bar -->
+                <div id="trip-progress-bar" class="trip-progress-bar" style="display: none;">
+                    <div class="progress-track">
+                        <div class="progress-fill progress-distance-fill"></div>
+                    </div>
+                    <span class="progress-distance-label">0 / 35,000 mi</span>
+                    <div class="progress-checks">
+                        <span class="progress-check" data-check="segments" title="Min 3 segments">3+ seg</span>
+                        <span class="progress-check" data-check="atlantic" title="Atlantic crossing">ATL</span>
+                        <span class="progress-check" data-check="pacific" title="Pacific crossing">PAC</span>
+                        <span class="progress-check" data-check="continents" title="3+ continents">3+ cont</span>
+                        <span class="progress-check" data-check="return" title="Return to origin">RTN</span>
+                    </div>
+                </div>
+
                 <div class="bottom-panel-section summary-section">
                     <h3>Trip Summary</h3>
                     <div id="trip-summary">
@@ -186,16 +209,19 @@
                     </div>
                 </div>
                 <div class="bottom-panel-section">
-                    <div id="trip-requirements" style="padding: 0.75rem; background: #f9f9f9; border-radius: 4px; font-size: 0.8rem; display: none;">
-                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: #667eea;">oneworld RTW Requirements</h4>
+                    <div id="trip-requirements" style="padding: 0.75rem; background: var(--color-bg); border-radius: 4px; font-size: 0.8rem; display: none;">
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--color-primary);">oneworld RTW Requirements</h4>
                         <div id="requirements-status"></div>
                     </div>
                 </div>
                 <div class="bottom-panel-section">
                     <div class="button-group" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                        <button id="undo-btn" class="btn btn-secondary" disabled>← Undo Last</button>
+                        <button id="undo-btn" class="btn btn-secondary" disabled title="Undo (Ctrl+Z)">← Undo</button>
+                        <button id="redo-btn" class="btn btn-secondary" disabled title="Redo (Ctrl+Y)" style="opacity: 0.5;">Redo →</button>
                         <button id="clear-btn" class="btn btn-secondary" disabled>Clear All</button>
-                        <button id="copy-trip-btn" class="btn btn-secondary" disabled>📋 Copy Trip</button>
+                        <button id="copy-trip-btn" class="btn btn-secondary" disabled>📋 Copy</button>
+                        <button id="export-trip-btn" class="btn btn-secondary" disabled>💾 Export</button>
+                        <label class="btn btn-secondary" style="margin: 0; cursor: pointer;">📂 Import<input id="import-trip-input" type="file" accept=".json" style="display: none;"></label>
                         <button id="validate-btn" class="btn btn-primary" disabled>Validate Trip</button>
                     </div>
                 </div>
