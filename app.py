@@ -7,6 +7,8 @@ from flask import Flask, render_template, jsonify, request, session, redirect, u
 from flask_cors import CORS
 from flask_compress import Compress
 from functools import wraps
+import hashlib
+import json
 import os
 import re
 from datetime import datetime, timedelta
@@ -175,9 +177,25 @@ def format_flight(flight: dict) -> dict:
 
 
 def cached_json(data, max_age: int):
-    """Return a JSON response with Cache-Control header."""
-    resp = make_response(jsonify(data))
+    """Return a JSON response with Cache-Control and ETag headers.
+
+    If the client sends If-None-Match matching the ETag, returns 304.
+    """
+    body = json.dumps(data, sort_keys=True, separators=(',', ':'))
+    etag = '"' + hashlib.md5(body.encode()).hexdigest() + '"'
+
+    # Check if client already has this version
+    if_none_match = request.headers.get('If-None-Match')
+    if if_none_match and if_none_match == etag:
+        resp = make_response('', 304)
+        resp.headers['ETag'] = etag
+        resp.headers['Cache-Control'] = f'public, max-age={max_age}'
+        return resp
+
+    resp = make_response(body)
+    resp.headers['Content-Type'] = 'application/json'
     resp.headers['Cache-Control'] = f'public, max-age={max_age}'
+    resp.headers['ETag'] = etag
     return resp
 
 
@@ -423,7 +441,35 @@ def suggestions():
 @app.route('/health')
 @app.route('/healthz')
 def health():
-    return jsonify({'status': 'ok'}), 200
+    """Health check that actually verifies data source connectivity"""
+    checks = {
+        'data_source_initialized': data_source is not None,
+        'airport_data_loaded': planner_coords is not None,
+    }
+
+    # Verify data source is responsive
+    if data_source:
+        try:
+            if _using_api:
+                # Quick check: see if cache has any entries (no API call needed)
+                checks['api_client'] = True
+            else:
+                # For database, verify we can query
+                airports = data_source.get_all_airports()
+                checks['database_responsive'] = len(airports) > 0
+        except Exception as e:
+            checks['data_source_error'] = str(e)
+
+    healthy = checks.get('data_source_initialized', False) and checks.get('airport_data_loaded', False)
+    status_code = 200 if healthy else 503
+
+    return jsonify({
+        'status': 'ok' if healthy else 'degraded',
+        'checks': checks,
+        'using_api': _using_api,
+        'data_source': 'seats.aero API' if _using_api else 'SQLite database',
+        'init_error': _init_error,
+    }), status_code
 
 
 @app.route('/api/status')

@@ -59,6 +59,34 @@
 }
 
 /* =============================================================================
+   ACCESSIBILITY
+   ============================================================================= */
+
+.skip-link {
+    position: absolute;
+    top: -100%;
+    left: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-primary);
+    color: white;
+    border-radius: 0 0 8px 8px;
+    z-index: 99999;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top 0.2s;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* Ensure focus outlines are visible for keyboard navigation */
+*:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* =============================================================================
    RESET & BASE
    ============================================================================= */
 
@@ -1446,6 +1474,83 @@ header h1 {
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }
+}
+
+/* =============================================================================
+   ONBOARDING WALKTHROUGH
+   ============================================================================= */
+
+.onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    pointer-events: none;
+}
+
+.onboarding-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+}
+
+.onboarding-tooltip {
+    position: absolute;
+    background: var(--color-bg-white);
+    border-radius: 12px;
+    padding: 1.25rem;
+    max-width: 320px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    z-index: 10002;
+    pointer-events: auto;
+    animation: slideUp 0.3s ease;
+}
+
+.onboarding-tooltip p {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--color-text);
+    margin: 0.5rem 0 1rem;
+}
+
+.onboarding-step-indicator {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-primary);
+}
+
+.onboarding-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.onboarding-skip {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.4rem;
+}
+
+.onboarding-skip:hover {
+    color: var(--color-text);
+}
+
+.onboarding-next {
+    padding: 0.5rem 1.25rem;
+    font-size: 0.85rem;
+}
+
+.onboarding-highlight {
+    position: relative;
+    z-index: 10002;
+    box-shadow: 0 0 0 4px var(--color-primary), 0 0 0 8px rgba(102, 126, 234, 0.3);
+    border-radius: 6px;
 }
 
 /* =============================================================================

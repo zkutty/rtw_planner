@@ -20,8 +20,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <header>
+    <a href="#map" class="skip-link">Skip to map</a>
+    <div class="container" role="main">
+        <header role="banner">
             <h1>🌍 Round-the-World Trip Planner</h1>
             <p class="subtitle">oneworld Alliance • Interactive Map Planner</p>
             <div style="text-align: center; margin-top: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
@@ -29,21 +30,21 @@
                 <button id="dark-mode-toggle" title="Toggle dark mode" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; color: white; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 1rem; transition: background 0.2s;">🌙</button>
             </div>
             <!-- Tab Navigation -->
-            <div class="tab-navigation" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; border-bottom: 2px solid rgba(255,255,255,0.2);">
-                <button class="tab-btn active" data-tab="map-view" style="background: transparent; border: none; color: white; padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+            <nav class="tab-navigation" role="tablist" aria-label="View mode" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; border-bottom: 2px solid rgba(255,255,255,0.2);">
+                <button class="tab-btn active" data-tab="map-view" role="tab" aria-selected="true" aria-controls="map-view-container" style="background: transparent; border: none; color: white; padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
                     🗺️ Map View
                 </button>
-                <button class="tab-btn" data-tab="table-view" style="background: transparent; border: none; color: rgba(255,255,255,0.7); padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                <button class="tab-btn" data-tab="table-view" role="tab" aria-selected="false" aria-controls="table-view-container" style="background: transparent; border: none; color: rgba(255,255,255,0.7); padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
                     📊 Table View
                 </button>
-            </div>
+            </nav>
         </header>
 
         <!-- Map View (default) -->
-        <div class="view-container active" id="map-view-container">
+        <div class="view-container active" id="map-view-container" role="tabpanel" aria-labelledby="map-view-tab">
         <div class="main-content">
             <!-- Control Panel -->
-            <div class="control-panel">
+            <div class="control-panel" role="complementary" aria-label="Trip configuration">
                 <div class="control-panel-content">
                 <div class="panel-section">
                     <h3>Trip Constraints</h3>
@@ -165,7 +166,7 @@
             <!-- Map Container -->
             <div class="map-container">
                 <!-- Loading Overlay -->
-                <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                <div id="loading-overlay" class="loading-overlay" style="display: none;" role="status" aria-live="polite" aria-label="Loading flights">
                     <div class="loading-content">
                         <div class="loading-spinner"></div>
                         <div class="loading-text">Loading flights...</div>
@@ -174,12 +175,12 @@
                         </div>
                     </div>
                 </div>
-                <div id="map"></div>
+                <div id="map" role="application" aria-label="Interactive flight map"></div>
             </div>
         </div>
         
         <!-- Bottom Panel - Trip Summary & Actions -->
-        <div class="bottom-panel" id="bottom-panel">
+        <div class="bottom-panel" id="bottom-panel" role="region" aria-label="Trip summary and actions">
             <!-- Expand/Collapse Toggle -->
             <button class="expand-toggle" id="expand-toggle" title="Expand/Collapse">
                 <span class="expand-icon">▲</span>
@@ -230,10 +231,10 @@
         </div>
 
         <!-- Flight Options Sidebar -->
-        <div class="sidebar" id="flight-sidebar">
+        <div class="sidebar" id="flight-sidebar" role="region" aria-label="Available flights">
             <div class="sidebar-header">
-                <h3>Available Flights</h3>
-                <button class="close-btn" id="close-sidebar">×</button>
+                <h3 id="sidebar-heading">Available Flights</h3>
+                <button class="close-btn" id="close-sidebar" aria-label="Close flight sidebar">×</button>
             </div>
             <!-- Flight Filters -->
             <div id="flight-filters" class="flight-filters" style="display: none;">
@@ -285,7 +286,7 @@
         <!-- End Map View Container -->
 
         <!-- Table View -->
-        <div class="view-container" id="table-view-container" style="display: none;">
+        <div class="view-container" id="table-view-container" role="tabpanel" aria-labelledby="table-view-tab" style="display: none;">
             <div class="table-view-wrapper">
                 <!-- Table View Controls -->
                 <div class="table-view-controls">
@@ -411,16 +412,16 @@
     </div>
 
     <!-- Validation Modal -->
-    <div id="validation-modal" class="modal">
+    <div id="validation-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="validation-heading">
         <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h2>Trip Validation</h2>
+            <span class="close-modal" role="button" aria-label="Close validation results" tabindex="0">&times;</span>
+            <h2 id="validation-heading">Trip Validation</h2>
             <div id="validation-results"></div>
         </div>
     </div>
 
     <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle Menu">☰</button>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle settings panel" aria-expanded="false">☰</button>
     
     <!-- Panel Overlay (for mobile) -->
     <div class="panel-overlay" id="panel-overlay"></div>
@@ -447,15 +448,17 @@
         
         if (mobileMenuToggle && controlPanel && panelOverlay) {
             mobileMenuToggle.addEventListener('click', () => {
-                controlPanel.classList.toggle('open');
+                const isOpen = controlPanel.classList.toggle('open');
                 panelOverlay.classList.toggle('show');
-                mobileMenuToggle.textContent = controlPanel.classList.contains('open') ? '✕' : '☰';
+                mobileMenuToggle.textContent = isOpen ? '✕' : '☰';
+                mobileMenuToggle.setAttribute('aria-expanded', String(isOpen));
             });
-            
+
             panelOverlay.addEventListener('click', () => {
                 controlPanel.classList.remove('open');
                 panelOverlay.classList.remove('show');
                 mobileMenuToggle.textContent = '☰';
+                mobileMenuToggle.setAttribute('aria-expanded', 'false');
             });
         }
         

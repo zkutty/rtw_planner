@@ -398,6 +398,8 @@ function showError(message) {
         toast = document.createElement('div');
         toast.id = '_appToast';
         toast.className = 'app-toast';
+        toast.setAttribute('role', 'status');
+        toast.setAttribute('aria-live', 'polite');
         document.body.appendChild(toast);
     }
     toast.textContent = message;
@@ -2353,6 +2355,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Table view initialization
     initTableView();
+
+    // Show onboarding for first-time visitors (after a short delay for map to load)
+    setTimeout(() => Onboarding.start(), 800);
 });
 
 // =============================================================================
@@ -2727,6 +2732,131 @@ const DarkMode = (() => {
 })();
 
 // =============================================================================
+// ONBOARDING WALKTHROUGH
+// =============================================================================
+
+const Onboarding = (() => {
+    const STORAGE_KEY = 'rtw_planner_onboarding_done';
+    const steps = [
+        {
+            target: '#starting-airports',
+            text: 'Start here: enter the airport(s) you want to depart from and return to.',
+            position: 'right'
+        },
+        {
+            target: '#start-date',
+            text: 'Set your departure date and return date for the trip window.',
+            position: 'right'
+        },
+        {
+            target: '#load-flights-btn',
+            text: 'Click "Load Flights" to search for available award flights on the map.',
+            position: 'right'
+        },
+        {
+            target: '#map',
+            text: 'Click routes on the map to add segments to your itinerary. The progress bar tracks your RTW requirements.',
+            position: 'left'
+        }
+    ];
+
+    let currentStep = 0;
+    let overlay = null;
+
+    function shouldShow() {
+        return !localStorage.getItem(STORAGE_KEY);
+    }
+
+    function start() {
+        if (!shouldShow()) return;
+        currentStep = 0;
+        showStep();
+    }
+
+    function dismiss() {
+        localStorage.setItem(STORAGE_KEY, 'true');
+        cleanup();
+    }
+
+    function cleanup() {
+        if (overlay) {
+            overlay.remove();
+            overlay = null;
+        }
+        document.querySelector('.onboarding-highlight')?.classList.remove('onboarding-highlight');
+    }
+
+    function showStep() {
+        cleanup();
+
+        if (currentStep >= steps.length) {
+            dismiss();
+            return;
+        }
+
+        const step = steps[currentStep];
+        const target = document.querySelector(step.target);
+        if (!target) {
+            currentStep++;
+            showStep();
+            return;
+        }
+
+        // Highlight target
+        target.classList.add('onboarding-highlight');
+
+        // Create overlay
+        overlay = document.createElement('div');
+        overlay.className = 'onboarding-overlay';
+        overlay.innerHTML = `
+            <div class="onboarding-backdrop"></div>
+            <div class="onboarding-tooltip onboarding-${step.position}">
+                <div class="onboarding-step-indicator">Step ${currentStep + 1} of ${steps.length}</div>
+                <p>${step.text}</p>
+                <div class="onboarding-actions">
+                    <button class="onboarding-skip">Skip tour</button>
+                    <button class="onboarding-next btn btn-primary">${currentStep < steps.length - 1 ? 'Next' : 'Got it!'}</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        // Position tooltip near target
+        const tooltip = overlay.querySelector('.onboarding-tooltip');
+        const rect = target.getBoundingClientRect();
+
+        if (step.position === 'right') {
+            tooltip.style.top = `${rect.top + window.scrollY}px`;
+            tooltip.style.left = `${rect.right + 12}px`;
+        } else {
+            tooltip.style.top = `${rect.top + window.scrollY + rect.height / 2}px`;
+            tooltip.style.right = `${window.innerWidth - rect.left + 12}px`;
+        }
+
+        // Clamp to viewport
+        requestAnimationFrame(() => {
+            const tRect = tooltip.getBoundingClientRect();
+            if (tRect.right > window.innerWidth - 10) {
+                tooltip.style.left = 'auto';
+                tooltip.style.right = '10px';
+            }
+            if (tRect.bottom > window.innerHeight - 10) {
+                tooltip.style.top = `${window.innerHeight - tRect.height - 10}px`;
+            }
+        });
+
+        overlay.querySelector('.onboarding-next').addEventListener('click', () => {
+            currentStep++;
+            showStep();
+        });
+        overlay.querySelector('.onboarding-skip').addEventListener('click', dismiss);
+        overlay.querySelector('.onboarding-backdrop').addEventListener('click', dismiss);
+    }
+
+    return { start, dismiss, shouldShow };
+})();
+
+// =============================================================================
 // GLOBAL EXPORTS
 // =============================================================================
 
@@ -2764,17 +2894,13 @@ const TableViewState = {
 
 // Tab switching
 function switchTab(tabName) {
-    // Update tab buttons
+    // Update tab buttons (including ARIA state)
     document.querySelectorAll('.tab-btn').forEach(btn => {
-        if (btn.dataset.tab === tabName) {
-            btn.classList.add('active');
-            btn.style.color = 'white';
-            btn.style.borderBottomColor = 'white';
-        } else {
-            btn.classList.remove('active');
-            btn.style.color = 'rgba(255,255,255,0.7)';
-            btn.style.borderBottomColor = 'transparent';
-        }
+        const isActive = btn.dataset.tab === tabName;
+        btn.classList.toggle('active', isActive);
+        btn.style.color = isActive ? 'white' : 'rgba(255,255,255,0.7)';
+        btn.style.borderBottomColor = isActive ? 'white' : 'transparent';
+        btn.setAttribute('aria-selected', String(isActive));
     });
     
     // Show/hide view containers
