@@ -73,7 +73,8 @@ body {
     background: var(--color-bg);
     color: var(--color-text);
     overflow: hidden;
-    height: 100vh;
+    height: 100vh;       /* fallback for browsers without dvh support */
+    height: 100dvh;      /* dynamic viewport height — correct on iOS Safari */
 }
 
 /* =============================================================================
@@ -83,7 +84,8 @@ body {
 .container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100vh;   /* fallback */
+    height: 100dvh;  /* dynamic viewport height */
     overflow: hidden;
 }
 
@@ -130,6 +132,7 @@ header h1 {
 .control-panel-content {
     flex: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     padding: var(--spacing-lg);
 }
 
@@ -173,7 +176,9 @@ header h1 {
     padding: var(--spacing-sm);
     border: 1px solid var(--color-border-light);
     border-radius: var(--border-radius);
-    font-size: var(--font-size-sm);
+    font-size: 16px; /* 16px globally prevents iOS Safari from zooming on focus */
+    -webkit-appearance: none; /* Remove iOS default styling */
+    appearance: none;
     transition: border-color var(--transition-fast);
 }
 
@@ -216,6 +221,11 @@ header h1 {
     cursor: not-allowed;
 }
 
+.btn:active:not(:disabled) {
+    transform: scale(0.97);
+    opacity: 0.85;
+}
+
 .btn-primary {
     background: var(--color-primary);
     color: white;
@@ -245,6 +255,7 @@ header h1 {
     max-height: 140px;
     overflow-y: auto;
     overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
     font-size: var(--font-size-sm);
 }
 
@@ -313,6 +324,7 @@ header h1 {
     height: 60vh;
     max-height: 500px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .bottom-panel.expanded .bottom-panel-content {
@@ -517,6 +529,7 @@ header h1 {
 .sidebar-content {
     flex: 1;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     padding: var(--spacing-md);
     min-height: 0;
 }
@@ -650,6 +663,7 @@ header h1 {
     max-width: 600px;
     max-height: 80vh;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     position: relative;
     animation: slideUp var(--transition-normal);
 }
@@ -956,12 +970,6 @@ header h1 {
         max-height: 90vh;
         margin: var(--spacing-md);
         padding: var(--spacing-lg);
-    }
-    
-    /* Input adjustments */
-    .input-group input,
-    .input-group select {
-        font-size: 16px; /* Prevents iOS zoom on focus */
     }
     
     /* Trip summary compact */
@@ -1330,4 +1338,132 @@ header h1 {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+/* =============================================================================
+   IN-APP TOAST & CONFIRM DIALOG (replaces native alert/confirm)
+   ============================================================================= */
+
+.app-toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 30, 50, 0.92);
+    color: #fff;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    max-width: 90vw;
+    text-align: center;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.app-toast.visible {
+    opacity: 1;
+}
+
+.app-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 1rem;
+}
+
+.app-confirm-box {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 320px;
+    width: 100%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    text-align: center;
+}
+
+.app-confirm-box p {
+    margin-bottom: 1.25rem;
+    font-size: 1rem;
+    color: #333;
+    line-height: 1.4;
+}
+
+.app-confirm-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.app-confirm-actions button {
+    flex: 1;
+    min-height: 44px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.app-confirm-actions .btn-cancel {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.app-confirm-actions .btn-confirm {
+    background: var(--color-error);
+    color: #fff;
+}
+
+/* Large touch-friendly Leaflet zoom controls */
+@media (hover: none) and (pointer: coarse) {
+    .leaflet-touch .leaflet-control-zoom a {
+        width: 44px;
+        height: 44px;
+        line-height: 44px;
+        font-size: 22px;
+    }
+}
+
+/* =============================================================================
+   iOS / ACCESSIBILITY — REDUCED MOTION
+   Respects the "Reduce Motion" accessibility setting on iOS and macOS.
+   Users who have this enabled see no animations.
+   ============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* =============================================================================
+   iOS — SAFE AREA INSETS (notch / home indicator support)
+   viewport-fit=cover must be set in the HTML meta tag for these to take effect.
+   ============================================================================= */
+
+@supports (padding: env(safe-area-inset-bottom)) {
+    body {
+        /* Prevent content from being hidden behind the home indicator */
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .bottom-panel {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .mobile-menu-toggle {
+        bottom: calc(var(--bottom-panel-height) + env(safe-area-inset-bottom) + 10px);
+    }
 }

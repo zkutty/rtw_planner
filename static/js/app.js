@@ -66,14 +66,148 @@ const AppState = {
     // Cache for API responses
     airportCoordsCache: {},
     flightCheckCache: {},
-    
+    _pendingCoordFetches: {},  // airport key → Promise (deduplicates in-flight requests)
+
     // Filtering state
     allFlights: [],  // Unfiltered flights
-    airportContinents: {}  // Cache for airport continent data
+    airportContinents: {},  // Cache for airport continent data
+
+    // Map marker pool: airport code → { marker, routeLines[] }
+    markerPool: {},
+
+    // Lazy polyline cache: "${origin}-${destination}" → L.Polyline
+    // Lines are created on first hover and reused, never pre-built.
+    _lineCache: new Map(),
+
+    // Last-rendered flight fingerprint for skip-if-unchanged guard
+    _lastRenderedFlightKey: null
 };
 
 // Expose for backwards compatibility and debugging
 window.selectedSegments = AppState.selectedSegments;
+
+// =============================================================================
+// CLIENT-SIDE RTW VALIDATOR (mirrors lib/interactive_rtw_planner.py logic)
+// Eliminates the /api/validate-trip round-trip on every segment change.
+// =============================================================================
+
+const RTWValidator = (() => {
+    const CONTINENTS = {
+        'North America': new Set(['JFK','EWR','LAX','SFO','ORD','MIA','DFW','ATL','BOS','SEA','YYZ','YVR','MEX','CUN','CLT','PHL','IAH','DEN','PHX','LAS']),
+        'South America': new Set(['GRU','GIG','EZE','LIM','BOG','SCL','MVD','ASU']),
+        'Europe':        new Set(['LHR','LGW','CDG','FRA','AMS','MAD','FCO','MUC','ZRH','VIE','CPH','ARN','OSL','HEL','DUB','LIS','ATH','BCN','MXP']),
+        'Asia':          new Set(['HKG','NRT','HND','ICN','PEK','PVG','SIN','BKK','KUL','TPE','DEL','BOM','DXB','DOH','AUH','IST']),
+        'Oceania':       new Set(['SYD','MEL','BNE','PER','AKL','WLG','NAN','PPT']),
+        'Africa':        new Set(['JNB','CPT','CAI','ADD','NBO','DAR','CMN'])
+    };
+
+    function getContinent(code) {
+        code = code.toUpperCase();
+        for (const [name, set] of Object.entries(CONTINENTS)) {
+            if (set.has(code)) return name;
+        }
+        return null;
+    }
+
+    function getZone(code) {
+        const c = getContinent(code);
+        if (!c) return null;
+        if (c === 'North America' || c === 'South America') return 'Americas';
+        if (c === 'Europe' || c === 'Africa') return 'Europe/Africa';
+        if (c === 'Asia' || c === 'Oceania') return 'Asia/Oceania';
+        return null;
+    }
+
+    function isAtlantic(o, d) {
+        const oz = getZone(o), dz = getZone(d);
+        return oz && dz && ((oz === 'Americas' && dz === 'Europe/Africa') || (oz === 'Europe/Africa' && dz === 'Americas'));
+    }
+
+    function isPacific(o, d) {
+        const oz = getZone(o), dz = getZone(d);
+        return oz && dz && ((oz === 'Americas' && dz === 'Asia/Oceania') || (oz === 'Asia/Oceania' && dz === 'Americas'));
+    }
+
+    function validate(segments) {
+        if (!segments || segments.length === 0) {
+            return { valid: false, errors: ['No segments in trip'], warnings: [], num_segments: 0, num_continents: 0, continents_visited: [], atlantic_crossed: false, pacific_crossed: false, total_distance_miles: 0, remaining_miles: 35000 };
+        }
+
+        const errors = [], warnings = [];
+        const n = segments.length;
+
+        // Rule 1: segment count
+        if (n < 3) errors.push(`Minimum 3 segments required, found ${n}`);
+        else if (n > 16) errors.push(`Maximum 16 segments allowed, found ${n}`);
+
+        // Rule 2: return to origin
+        const origin = segments[0].origin.toUpperCase();
+        const finalDest = segments[n - 1].destination.toUpperCase();
+        if (finalDest !== origin) errors.push(`Must return to origin (${origin}), final destination is ${finalDest}`);
+
+        // Rule 3 & 4: ocean crossings
+        let atlanticCount = 0, pacificCount = 0;
+        for (const seg of segments) {
+            const o = seg.origin.toUpperCase(), d = seg.destination.toUpperCase();
+            if (isAtlantic(o, d)) atlanticCount++;
+            if (isPacific(o, d)) pacificCount++;
+        }
+        if (atlanticCount === 0) errors.push('Must cross Atlantic Ocean at least once');
+        if (pacificCount === 0) errors.push('Must cross Pacific Ocean at least once');
+        if (atlanticCount > 1) errors.push(`Only one Atlantic crossing permitted, found ${atlanticCount}`);
+        if (pacificCount > 1) errors.push(`Only one Pacific crossing permitted, found ${pacificCount}`);
+
+        // Rule 5: continents
+        const continentsVisited = new Set();
+        for (const seg of segments) {
+            const oc = getContinent(seg.origin), dc = getContinent(seg.destination);
+            if (oc) continentsVisited.add(oc);
+            if (dc) continentsVisited.add(dc);
+        }
+        const numContinents = continentsVisited.size;
+        if (numContinents < 3) warnings.push(`Only ${numContinents} continent(s) visited. RTW fare based on 3-6 continents.`);
+        else if (numContinents > 6) warnings.push(`${numContinents} continents visited (max 6 for fare calculation)`);
+
+        // Distance
+        const RTW_LIMIT = 35000;
+        const totalDistance = segments.reduce((sum, s) => sum + (s.distance_miles || 0), 0);
+        if (totalDistance > RTW_LIMIT) errors.push(`Total distance (${totalDistance.toFixed(0)} miles) exceeds 35,000 mile limit`);
+        else if (totalDistance > RTW_LIMIT * 0.95) warnings.push(`Total distance (${totalDistance.toFixed(0)} miles) is close to 35,000 mile limit`);
+
+        // Stopovers
+        const stopovers = [];
+        for (let i = 0; i < segments.length - 1; i++) {
+            const curr = new Date(segments[i].date), next = new Date(segments[i + 1].date);
+            const hours = (next - curr) / 3600000;
+            if (hours > 24) stopovers.push({ airport: segments[i].destination, days: hours / 24, segment: i + 1 });
+        }
+
+        const totalDays = segments.length > 1
+            ? Math.round((new Date(segments[n - 1].date) - new Date(segments[0].date)) / 86400000)
+            : 0;
+
+        return {
+            valid: errors.length === 0,
+            errors, warnings,
+            num_segments: n,
+            num_continents: numContinents,
+            continents_visited: [...continentsVisited].sort(),
+            atlantic_crossed: atlanticCount > 0,
+            pacific_crossed: pacificCount > 0,
+            stopovers, total_days: totalDays,
+            total_distance_miles: totalDistance,
+            remaining_miles: RTW_LIMIT - totalDistance
+        };
+    }
+
+    return { validate, getContinent };
+})();
+
+// =============================================================================
+// CACHED DOM REFERENCES (populated in DOMContentLoaded)
+// =============================================================================
+
+const DOM = {};
 
 // =============================================================================
 // UTILITY FUNCTIONS
@@ -256,28 +390,81 @@ function filterOneWorldFlights(flights) {
 }
 
 /**
- * Show error message
+ * Show a non-blocking in-app toast notification (replaces alert())
  */
 function showError(message) {
-    alert(message);
+    let toast = document.getElementById('_appToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = '_appToast';
+        toast.className = 'app-toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('visible');
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => toast.classList.remove('visible'), 3500);
 }
 
 /**
- * Get airport coordinates (with caching)
+ * Show an in-app confirm dialog (replaces confirm()).
+ * Returns a Promise<boolean>.
+ */
+function showConfirm(message) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'app-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="app-confirm-box">
+                <p>${message}</p>
+                <div class="app-confirm-actions">
+                    <button class="btn-cancel">Cancel</button>
+                    <button class="btn-confirm">Confirm</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        overlay.querySelector('.btn-cancel').addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            resolve(false);
+        });
+        overlay.querySelector('.btn-confirm').addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            resolve(true);
+        });
+    });
+}
+
+/**
+ * Get airport coordinates (with caching and in-flight request deduplication)
  */
 async function getAirportCoords(airports) {
-    const uncached = airports.filter(a => !AppState.airportCoordsCache[a]);
-    
-    if (uncached.length > 0) {
-        try {
-            const response = await fetch(`/api/airport-coords?${uncached.map(a => `airports=${a}`).join('&')}`);
-            const coords = await response.json();
-            Object.assign(AppState.airportCoordsCache, coords);
-        } catch (error) {
-            console.error('Error fetching coordinates:', error);
-        }
+    // Split into already-cached, already-pending, and truly new
+    const pending = AppState._pendingCoordFetches;
+    const toFetch = airports.filter(a => !AppState.airportCoordsCache[a] && !pending[a]);
+
+    if (toFetch.length > 0) {
+        const fetchPromise = fetch(`/api/airport-coords?${toFetch.map(a => `airports=${a}`).join('&')}`)
+            .then(r => r.json())
+            .then(coords => {
+                Object.assign(AppState.airportCoordsCache, coords);
+                toFetch.forEach(a => delete pending[a]);
+            })
+            .catch(err => {
+                console.error('Error fetching coordinates:', err);
+                toFetch.forEach(a => delete pending[a]);
+            });
+        // Register the same promise for all airports in this batch
+        toFetch.forEach(a => { pending[a] = fetchPromise; });
+        await fetchPromise;
     }
-    
+
+    // Also await any already-pending fetches for airports we need
+    const stillPending = airports.filter(a => pending[a]);
+    if (stillPending.length > 0) {
+        await Promise.all([...new Set(stillPending.map(a => pending[a]))]);
+    }
+
     const result = {};
     airports.forEach(a => {
         result[a] = AppState.airportCoordsCache[a] || { lat: 0, lon: 0, name: a };
@@ -344,12 +531,15 @@ function clearFlightMarkers() {
         clearTimeout(AppState.hoverTimeout);
         AppState.hoverTimeout = null;
     }
-    
+
     AppState.flightMarkers.forEach(marker => AppState.map.removeLayer(marker));
-    AppState.routeLines.forEach(({ line }) => {
+
+    // Remove any cached route lines from the map
+    AppState._lineCache.forEach(line => {
         if (AppState.map.hasLayer(line)) AppState.map.removeLayer(line);
     });
-    
+    AppState._lineCache.clear();
+
     AppState.flightMarkers = [];
     AppState.routeLines = [];
     AppState.hoverLine = null;
@@ -422,28 +612,44 @@ function highlightRoute(origin, destination) {
         clearTimeout(AppState.hoverTimeout);
         AppState.hoverTimeout = null;
     }
-    
+
     const routeKey = `${origin}-${destination}`;
     if (AppState.currentHighlightedRoute === routeKey) return;
-    
+
     AppState.hoverTimeout = setTimeout(() => {
-        const route = AppState.routeLines.find(r => 
+        const route = AppState.routeLines.find(r =>
             r.flight.origin === origin && r.flight.destination === destination
         );
-        
-        if (route && !route.line._isSelected) {
+
+        if (route) {
             if (AppState.currentHighlightedRoute && AppState.currentHighlightedRoute !== routeKey) {
                 clearHighlight();
             }
-            
+
             requestAnimationFrame(() => {
-                route.line.setStyle({ opacity: 0.9, weight: 4 });
-                AppState.hoverLine = route.line;
-                
+                // Create line lazily on first hover, reuse on subsequent hovers
+                let line = AppState._lineCache.get(routeKey);
+                if (!line) {
+                    const isDirect = route.flight.is_direct;
+                    const color = route.marker._cabinClass === 'business' ? '#667eea'
+                        : route.marker._cabinClass === 'premium' ? '#4CAF50' : '#FF9800';
+                    const path = getGreatCirclePath(route._mainCoords, route._airportCoords);
+                    line = L.polyline(path, {
+                        color,
+                        weight: 4,
+                        opacity: 0.9,
+                        dashArray: isDirect ? null : '5, 5'
+                    }).addTo(AppState.map);
+                    AppState._lineCache.set(routeKey, line);
+                } else {
+                    line.setStyle({ opacity: 0.9, weight: 4 });
+                    if (!AppState.map.hasLayer(line)) line.addTo(AppState.map);
+                }
+                AppState.hoverLine = line;
+
                 if (!route.marker._originalIcon) {
                     route.marker._originalIcon = route.marker.options.icon;
                 }
-                
                 route.marker.setIcon(L.divIcon({
                     className: 'destination-marker',
                     html: `<div style="background: #667eea; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8rem; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.4);">${destination}</div>`,
@@ -466,7 +672,10 @@ function clearHighlight() {
     
     requestAnimationFrame(() => {
         if (AppState.hoverLine) {
-            AppState.hoverLine.setStyle({ opacity: 0, weight: 2 });
+            // Remove from map (lazy lines are not permanently on the map)
+            if (AppState.map.hasLayer(AppState.hoverLine)) {
+                AppState.map.removeLayer(AppState.hoverLine);
+            }
             AppState.hoverLine = null;
         }
         
@@ -494,14 +703,14 @@ async function loadFlightsFromAirport(origin, date) {
     AppState.isLoadingFlights = true;
     AppState.currentLoadAbortController = new AbortController();
     
-    const loadBtn = document.getElementById('load-flights-btn');
+    const loadBtn = DOM.loadFlightsBtn;
     if (loadBtn) {
         loadBtn.disabled = true;
         loadBtn.textContent = 'Loading...';
     }
-    
+
     // Show loading overlay
-    const loadingOverlay = document.getElementById('loading-overlay');
+    const loadingOverlay = DOM.loadingOverlay;
     const loadingText = loadingOverlay?.querySelector('.loading-text');
     if (loadingOverlay) {
         loadingOverlay.style.display = 'flex';
@@ -808,8 +1017,13 @@ function renderFlightList(flights, origin, direction, targetDateRange) {
 }
 
 function renderFlightListItems(flights, headerHTML = '', direction = 'forward', targetDateRange = null) {
-    const flightList = document.getElementById('flight-list');
+    const flightList = DOM.flightList || document.getElementById('flight-list');
     if (!flightList) return;
+
+    // Skip full re-render if the same flights are already displayed
+    const key = flights.map(f => `${f.origin}${f.destination}${f.date}`).join('|') + '|' + direction;
+    if (key === AppState._lastRenderedFlightKey && !targetDateRange) return;
+    AppState._lastRenderedFlightKey = key;
     
     flightList.innerHTML = headerHTML + flights.map((flight, index) => {
         const hasBusiness = flight.business_miles_int > 0;
@@ -867,6 +1081,8 @@ function renderFlightListItems(flights, headerHTML = '', direction = 'forward', 
         return `
             <div class="flight-item" 
                  data-flight-index="${flightIndex}"
+                 data-origin="${flight.origin}"
+                 data-dest="${flight.destination}"
                  style="${borderStyle}"
                  onmouseenter="highlightRoute('${flight.origin}', '${flight.destination}')"
                  onmouseleave="clearHighlight()"
@@ -1114,18 +1330,9 @@ async function displayFlightsOnMap(flights, origin, direction = 'forward', targe
         
         AppState.flightMarkers.push(marker);
         
-        // Add route lines
+        // Store route metadata for lazy line creation on hover
         airportFlights.forEach(flight => {
-            const path = getGreatCirclePath(mainCoords, airportCoords);
-            const line = L.polyline(path, {
-                color: flight.is_direct ? markerColor : '#FF9800',
-                weight: 2,
-                opacity: 0,
-                dashArray: flight.is_direct ? null : '5, 5'
-            }).addTo(AppState.map);
-            
-            line._flightData = flight;
-            AppState.routeLines.push({ line, marker, flight });
+            AppState.routeLines.push({ marker, flight, _mainCoords: mainCoords, _airportCoords: airportCoords });
         });
     });
     
@@ -1415,9 +1622,9 @@ function undoLast() {
     }, 50);
 }
 
-function clearAll() {
+async function clearAll() {
     if (AppState.isLoadingFlights || AppState.isSelectingFlight) return;
-    if (!confirm('Clear all segments?')) return;
+    if (!(await showConfirm('Clear all segments?'))) return;
     
     AppState.selectedSegments = [];
     window.selectedSegments = AppState.selectedSegments;
@@ -1471,10 +1678,10 @@ function editSegmentDate(segmentIndex) {
 // TRIP SUMMARY & VALIDATION
 // =============================================================================
 
-async function updateTripSummary() {
-    const summaryDiv = document.getElementById('trip-summary');
-    const requirementsDiv = document.getElementById('trip-requirements');
-    const requirementsStatus = document.getElementById('requirements-status');
+function updateTripSummary() {
+    const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+    const requirementsDiv = DOM.tripRequirements || document.getElementById('trip-requirements');
+    const requirementsStatus = DOM.requirementsStatus || document.getElementById('requirements-status');
     
     if (AppState.selectedSegments.length === 0) {
         summaryDiv.innerHTML = '<p class="empty-state">No segments selected yet</p>';
@@ -1546,66 +1753,55 @@ async function updateTripSummary() {
         ${mustVisitHtml}
     `;
     
-    // Validate and show requirements
+    // Validate using client-side validator (no API call needed)
     if (requirementsDiv && requirementsStatus) {
-        try {
-            const response = await fetch('/api/validate-trip', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ segments: AppState.selectedSegments })
-            });
-            const validation = await response.json();
-            
-            if (!validation.error) {
-                requirementsStatus.innerHTML = `
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: ${validation.num_segments >= 3 && validation.num_segments <= 16 ? '#4CAF50' : '#f44336'};">
-                            ${validation.num_segments >= 3 && validation.num_segments <= 16 ? '✓' : '✗'}
-                        </span>
-                        <strong>Segments:</strong> ${validation.num_segments} (min 3, max 16)
-                    </div>
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: ${validation.atlantic_crossed ? '#4CAF50' : '#f44336'};">
-                            ${validation.atlantic_crossed ? '✓' : '✗'}
-                        </span>
-                        <strong>Atlantic Crossing:</strong> ${validation.atlantic_crossed ? 'Yes' : 'No'}
-                    </div>
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: ${validation.pacific_crossed ? '#4CAF50' : '#f44336'};">
-                            ${validation.pacific_crossed ? '✓' : '✗'}
-                        </span>
-                        <strong>Pacific Crossing:</strong> ${validation.pacific_crossed ? 'Yes' : 'No'}
-                    </div>
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: ${validation.num_continents >= 3 ? '#4CAF50' : '#FF9800'};">
-                            ${validation.num_continents >= 3 ? '✓' : '○'}
-                        </span>
-                        <strong>Continents:</strong> ${validation.num_continents} (${validation.continents_visited.join(', ')})
-                    </div>
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: ${validation.total_distance_miles < 35000 ? '#4CAF50' : '#f44336'};">
-                            ${validation.total_distance_miles < 35000 ? '✓' : '✗'}
-                        </span>
-                        <strong>Distance:</strong> ${validation.total_distance_miles.toFixed(0)} / 35,000 miles
-                    </div>
-                    <div style="margin-bottom: 0.5rem;">
-                        <span style="color: ${!validation.errors.some(e => e.includes('return to origin')) ? '#4CAF50' : '#f44336'};">
-                            ${!validation.errors.some(e => e.includes('return to origin')) ? '✓' : '✗'}
-                        </span>
-                        <strong>Return to Origin:</strong> ${validation.errors.some(e => e.includes('return to origin')) ? 'No' : 'Yes'}
-                    </div>
-                    ${validation.errors.length > 0 ? `
-                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: #ffebee; border-radius: 4px; font-size: 0.75rem;">
-                            <strong style="color: #f44336;">Errors:</strong>
-                            ${validation.errors.map(e => `<div>• ${e}</div>`).join('')}
-                        </div>
-                    ` : ''}
-                `;
-                requirementsDiv.style.display = 'block';
-            }
-        } catch (error) {
-            console.error('Error validating trip:', error);
-        }
+        const validation = RTWValidator.validate(AppState.selectedSegments);
+        const returnsToOrigin = !validation.errors.some(e => e.includes('return to origin'));
+        requirementsStatus.innerHTML = `
+            <div style="margin-bottom: 0.5rem;">
+                <span style="color: ${validation.num_segments >= 3 && validation.num_segments <= 16 ? '#4CAF50' : '#f44336'};">
+                    ${validation.num_segments >= 3 && validation.num_segments <= 16 ? '✓' : '✗'}
+                </span>
+                <strong>Segments:</strong> ${validation.num_segments} (min 3, max 16)
+            </div>
+            <div style="margin-bottom: 0.5rem;">
+                <span style="color: ${validation.atlantic_crossed ? '#4CAF50' : '#f44336'};">
+                    ${validation.atlantic_crossed ? '✓' : '✗'}
+                </span>
+                <strong>Atlantic Crossing:</strong> ${validation.atlantic_crossed ? 'Yes' : 'No'}
+            </div>
+            <div style="margin-bottom: 0.5rem;">
+                <span style="color: ${validation.pacific_crossed ? '#4CAF50' : '#f44336'};">
+                    ${validation.pacific_crossed ? '✓' : '✗'}
+                </span>
+                <strong>Pacific Crossing:</strong> ${validation.pacific_crossed ? 'Yes' : 'No'}
+            </div>
+            <div style="margin-bottom: 0.5rem;">
+                <span style="color: ${validation.num_continents >= 3 ? '#4CAF50' : '#FF9800'};">
+                    ${validation.num_continents >= 3 ? '✓' : '○'}
+                </span>
+                <strong>Continents:</strong> ${validation.num_continents} (${validation.continents_visited.join(', ')})
+            </div>
+            <div style="margin-bottom: 0.5rem;">
+                <span style="color: ${validation.total_distance_miles < 35000 ? '#4CAF50' : '#f44336'};">
+                    ${validation.total_distance_miles < 35000 ? '✓' : '✗'}
+                </span>
+                <strong>Distance:</strong> ${validation.total_distance_miles.toFixed(0)} / 35,000 miles
+            </div>
+            <div style="margin-bottom: 0.5rem;">
+                <span style="color: ${returnsToOrigin ? '#4CAF50' : '#f44336'};">
+                    ${returnsToOrigin ? '✓' : '✗'}
+                </span>
+                <strong>Return to Origin:</strong> ${returnsToOrigin ? 'Yes' : 'No'}
+            </div>
+            ${validation.errors.length > 0 ? `
+                <div style="margin-top: 0.5rem; padding: 0.5rem; background: #ffebee; border-radius: 4px; font-size: 0.75rem;">
+                    <strong style="color: #f44336;">Errors:</strong>
+                    ${validation.errors.map(e => `<div>• ${e}</div>`).join('')}
+                </div>
+            ` : ''}
+        `;
+        requirementsDiv.style.display = 'block';
     }
 }
 
@@ -1853,6 +2049,14 @@ async function showNearbyAirports(airport) {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Cache frequently-accessed DOM elements to avoid repeated querySelector lookups
+    DOM.flightList        = document.getElementById('flight-list');
+    DOM.tripSummary       = document.getElementById('trip-summary');
+    DOM.tripRequirements  = document.getElementById('trip-requirements');
+    DOM.requirementsStatus = document.getElementById('requirements-status');
+    DOM.loadingOverlay    = document.getElementById('loading-overlay');
+    DOM.loadFlightsBtn    = document.getElementById('load-flights-btn');
+
     initMap();
     
     // Load Flights button
@@ -1941,6 +2145,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('close-sidebar')?.addEventListener('click', () => {
         document.getElementById('flight-sidebar').classList.remove('open');
     });
+
+    // Touch support for flight item route highlighting (mirrors mouse hover behaviour)
+    // Uses event delegation on the flight list container so it works for dynamically rendered items.
+    const flightListEl = DOM.flightList;
+    if (flightListEl) {
+        flightListEl.addEventListener('touchstart', e => {
+            const item = e.target.closest('.flight-item[data-flight-index]');
+            if (!item) return;
+            const origin = item.getAttribute('data-origin');
+            const dest = item.getAttribute('data-dest');
+            if (origin && dest) highlightRoute(origin, dest);
+        }, { passive: true });
+
+        flightListEl.addEventListener('touchend', () => {
+            clearHighlight();
+        }, { passive: true });
+    }
     
     // Flight filter event listeners - auto-apply on change
     ['filter-continent', 'filter-date-start', 'filter-date-end', 'filter-class', 'filter-stops'].forEach(id => {
@@ -2092,8 +2313,8 @@ function initTableView() {
     }
     
     // Table clear all button
-    document.getElementById('table-clear-all-btn')?.addEventListener('click', () => {
-        if (AppState.selectedSegments.length > 0 && confirm('Clear all selected flights?')) {
+    document.getElementById('table-clear-all-btn')?.addEventListener('click', async () => {
+        if (AppState.selectedSegments.length > 0 && await showConfirm('Clear all selected flights?')) {
             clearAll();
             updateSelectedFlightsTable();
             TableViewState.availableFlights = [];

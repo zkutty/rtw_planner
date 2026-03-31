@@ -3,11 +3,13 @@
 Flask web application for interactive RTW trip planning
 Supports both Seats.aero Partner API (live) and SQLite database (offline)
 """
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for, make_response
 from flask_cors import CORS
+from flask_compress import Compress
 from functools import wraps
 import os
 from datetime import datetime, timedelta
+from typing import Optional
 
 # Load environment variables from .env file if it exists
 try:
@@ -19,6 +21,7 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24).hex())
 CORS(app)
+Compress(app)
 
 # Password protection
 SITE_PASSWORD = os.environ.get('SITE_PASSWORD', None)
@@ -151,7 +154,6 @@ def format_flight(flight: dict) -> dict:
         'origin': flight['origin'],
         'destination': flight['destination'],
         'date': flight['date'],
-        'date_diff': flight.get('date_diff', 0),
         'is_direct': flight.get('is_direct', False),
         'num_stops': flight.get('num_stops', 0),
         'business_seats': flight.get('business_seats', 0),
@@ -169,6 +171,13 @@ def format_flight(flight: dict) -> dict:
         'origin_name': origin_name,
         'destination_name': dest_name
     }
+
+
+def cached_json(data, max_age: int):
+    """Return a JSON response with Cache-Control header."""
+    resp = make_response(jsonify(data))
+    resp.headers['Cache-Control'] = f'public, max-age={max_age}'
+    return resp
 
 
 def filter_by_cabin_class(flights: list, cabin_class: str) -> list:
@@ -413,7 +422,7 @@ def get_flights():
         flights = filter_by_cabin_class(flights, cabin_class)
         formatted = [format_flight(f) for f in flights]
         
-        return jsonify({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database', 'program': miles_program})
+        return cached_json({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database', 'program': miles_program}, max_age=60)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -456,7 +465,7 @@ def get_flights_to():
         flights = filter_by_cabin_class(flights, cabin_class)
         formatted = [format_flight(f) for f in flights]
         
-        return jsonify({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database', 'program': miles_program})
+        return cached_json({'flights': formatted, 'count': len(formatted), 'source': 'api' if _using_api else 'database', 'program': miles_program}, max_age=60)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -473,9 +482,9 @@ def get_nearby_airports():
     
     try:
         nearby = planner_coords.get_nearby_airports(airport, max_results=5)
-        formatted = [{'code': code, 'distance': round(distance), 'name': city_name} 
+        formatted = [{'code': code, 'distance': round(distance), 'name': city_name}
                     for code, distance, city_name in nearby]
-        return jsonify({'airports': formatted})
+        return cached_json({'airports': formatted}, max_age=86400)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -511,8 +520,8 @@ def get_airport_coords():
             }
         else:
             coords[airport] = {'lat': 0.0, 'lon': 0.0, 'name': airport}
-    
-    return jsonify(coords)
+
+    return cached_json(coords, max_age=86400)
 
 
 @app.route('/api/all-airports', methods=['GET'])
@@ -523,10 +532,10 @@ def get_all_airports():
     
     try:
         all_airports = data_source.get_all_airports()
-        return jsonify({
+        return cached_json({
             'total_airports': len(all_airports),
             'airports': sorted(list(all_airports))
-        })
+        }, max_age=3600)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -567,8 +576,8 @@ def get_airport_names():
         if name == code and planner_coords:
             name = planner_coords.get_airport_name(code)
         names[code] = name
-    
-    return jsonify(names)
+
+    return cached_json(names, max_age=86400)
 
 
 @app.route('/api/airport-continent', methods=['GET'])
@@ -592,8 +601,8 @@ def get_airport_continent():
                 continent = _infer_continent_from_country(info.get('country', ''), info.get('lat', 0), info.get('lon', 0))
         
         continents[code] = continent
-    
-    return jsonify(continents)
+
+    return cached_json(continents, max_age=86400)
 
 
 def _infer_continent_from_country(country: str, lat: float, lon: float) -> Optional[str]:
@@ -645,7 +654,7 @@ def airport_has_flights():
     
     try:
         has_flights = data_source.airport_has_flights(airport, start_date)
-        return jsonify({'airport': airport, 'has_flights': has_flights})
+        return cached_json({'airport': airport, 'has_flights': has_flights}, max_age=60)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
