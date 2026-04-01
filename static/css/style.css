@@ -764,22 +764,65 @@ header h1 {
    MOBILE RESPONSIVE STYLES
    ============================================================================= */
 
-/* Mobile menu toggle button */
+/* =============================================================================
+   HEADER LAYOUT
+   ============================================================================= */
+
+.header-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.header-link {
+    color: #fff;
+    text-decoration: none;
+    font-weight: 500;
+    opacity: 0.9;
+    font-size: 0.9rem;
+}
+
+.header-icon-btn {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 6px;
+    color: white;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background 0.2s;
+}
+
+.header-icon-btn:hover {
+    background: rgba(255,255,255,0.25);
+}
+
+/* Mobile menu toggle button — hidden on desktop, shown inline in header on mobile */
 .mobile-menu-toggle {
     display: none;
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    z-index: 2000;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background: var(--color-primary);
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 6px;
     color: white;
-    border: none;
-    font-size: 1.5rem;
-    box-shadow: var(--shadow-md);
+    width: 38px;
+    height: 38px;
+    font-size: 1.2rem;
     cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.mobile-menu-toggle:hover {
+    background: rgba(255,255,255,0.25);
 }
 
 /* Tablet styles (768px and below) */
@@ -840,11 +883,23 @@ header h1 {
         transform: translateX(0);
     }
 
-    /* Show toggle button on mobile */
+    /* Show toggle button inline in header on mobile */
     .mobile-menu-toggle {
         display: flex;
-        align-items: center;
-        justify-content: center;
+    }
+
+    /* Header row left-aligns on mobile */
+    .header-top-row {
+        justify-content: space-between;
+    }
+
+    .header-top-row h1 {
+        flex: 1;
+        text-align: left;
+    }
+
+    .header-link-text {
+        display: none;
     }
 
     /* Map takes full space */
@@ -934,6 +989,43 @@ header h1 {
 
     .panel-overlay.show {
         display: block;
+    }
+
+    /* Table view — scrollable on mobile */
+    .table-view-wrapper {
+        padding: var(--spacing-sm);
+    }
+
+    .table-view-controls {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+
+    .table-controls-right {
+        width: 100%;
+    }
+
+    .table-controls-right .btn {
+        flex: 1;
+    }
+
+    .table-filters .filter-row {
+        flex-direction: column;
+    }
+
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .flights-table {
+        min-width: 600px;
+    }
+
+    /* Available flights table scroll area */
+    #available-flights-table-container {
+        max-height: none !important;
     }
 }
 
@@ -1041,13 +1133,11 @@ header h1 {
         font-size: var(--font-size-xs);
     }
 
-    /* Mobile menu toggle — above the bottom bar, not overlapping content */
+    /* Mobile menu toggle — slightly smaller on phones */
     .mobile-menu-toggle {
-        bottom: calc(var(--bottom-panel-height) + 8px);
-        left: 12px;
-        width: 44px;
-        height: 44px;
-        font-size: 1.2rem;
+        width: 34px;
+        height: 34px;
+        font-size: 1.1rem;
     }
 }
 
@@ -1245,7 +1335,8 @@ header h1 {
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     padding: var(--spacing-lg);
     background: var(--color-bg);
     min-height: 0;
@@ -1310,7 +1401,8 @@ header h1 {
 .table-container {
     background: white;
     border-radius: var(--border-radius-lg);
-    overflow: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     box-shadow: var(--shadow-sm);
 }
 
@@ -2073,10 +2165,6 @@ header h1 {
 
     .bottom-panel {
         padding-bottom: env(safe-area-inset-bottom);
-    }
-
-    .mobile-menu-toggle {
-        bottom: calc(var(--bottom-panel-height) + env(safe-area-inset-bottom) + 10px);
     }
 
     .sidebar {

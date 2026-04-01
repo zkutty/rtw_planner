@@ -26,12 +26,15 @@
     <a href="#map" class="skip-link">Skip to map</a>
     <div class="container" role="main">
         <header role="banner">
-            <h1>🌍 Round-the-World Trip Planner</h1>
-            <p class="subtitle">oneworld Alliance • Interactive Map Planner</p>
-            <div style="text-align: center; margin-top: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
-                <a href="/suggestions" style="color: #fff; text-decoration: none; font-weight: 500; opacity: 0.9;">🔍 Trip Suggestions</a>
-                <button id="dark-mode-toggle" title="Toggle dark mode" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; color: white; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 1rem; transition: background 0.2s;">🌙</button>
+            <div class="header-top-row">
+                <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle settings panel" aria-expanded="false">☰</button>
+                <h1>🌍 Round-the-World Trip Planner</h1>
+                <div class="header-actions">
+                    <a href="/suggestions" class="header-link">🔍 <span class="header-link-text">Suggestions</span></a>
+                    <button id="dark-mode-toggle" class="header-icon-btn" title="Toggle dark mode">🌙</button>
+                </div>
             </div>
+            <p class="subtitle">oneworld Alliance • Interactive Map Planner</p>
             <!-- Tab Navigation -->
             <nav class="tab-navigation" role="tablist" aria-label="View mode" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; border-bottom: 2px solid rgba(255,255,255,0.2);">
                 <button class="tab-btn active" data-tab="map-view" role="tab" aria-selected="true" aria-controls="map-view-container" style="background: transparent; border: none; color: white; padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
@@ -423,9 +426,6 @@
         </div>
     </div>
 
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle settings panel" aria-expanded="false">☰</button>
-    
     <!-- Panel Overlay (for mobile) -->
     <div class="panel-overlay" id="panel-overlay"></div>
 
