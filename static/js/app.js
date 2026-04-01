@@ -213,6 +213,19 @@ const DOM = {};
 // UTILITY FUNCTIONS
 // =============================================================================
 
+/** iOS body scroll lock — toggle when sidebar/modal opens */
+function openSidebar() {
+    const sidebar = document.getElementById('flight-sidebar');
+    sidebar?.classList.add('open');
+    document.body.classList.add('sidebar-open');
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById('flight-sidebar');
+    sidebar?.classList.remove('open');
+    document.body.classList.remove('sidebar-open');
+}
+
 /**
  * Calculate great-circle distance between two coordinates (Haversine formula)
  */
@@ -398,6 +411,8 @@ function showError(message) {
         toast = document.createElement('div');
         toast.id = '_appToast';
         toast.className = 'app-toast';
+        toast.setAttribute('role', 'status');
+        toast.setAttribute('aria-live', 'polite');
         document.body.appendChild(toast);
     }
     toast.textContent = message;
@@ -434,6 +449,44 @@ function showConfirm(message) {
         });
     });
 }
+
+// =============================================================================
+// GLOBAL ERROR BOUNDARY
+// Catches unhandled JS errors and promise rejections, shows user-friendly toasts
+// instead of silent failures, and prevents cascading UI breakage.
+// =============================================================================
+
+window.addEventListener('error', (event) => {
+    // Ignore script loading errors (e.g. ad blockers, CDN failures)
+    if (event.target && (event.target.tagName === 'SCRIPT' || event.target.tagName === 'LINK')) return;
+
+    console.error('[Error Boundary]', event.error || event.message);
+    showError('Something went wrong. Please try again.');
+
+    // Ensure loading states are reset so the UI isn't stuck
+    AppState.isLoadingFlights = false;
+    AppState.isSelectingFlight = false;
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'none';
+    const loadBtn = document.getElementById('load-flights-btn');
+    if (loadBtn) { loadBtn.disabled = false; loadBtn.textContent = 'Load Flights'; }
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    // Ignore AbortError (expected when cancelling fetch requests)
+    if (event.reason?.name === 'AbortError') return;
+
+    console.error('[Unhandled Promise]', event.reason);
+    showError('A network or processing error occurred.');
+
+    // Reset loading states
+    AppState.isLoadingFlights = false;
+    AppState.isSelectingFlight = false;
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'none';
+    const loadBtn = document.getElementById('load-flights-btn');
+    if (loadBtn) { loadBtn.disabled = false; loadBtn.textContent = 'Load Flights'; }
+});
 
 /**
  * Get airport coordinates (with caching and in-flight request deduplication)
@@ -557,49 +610,64 @@ function clearMap() {
 // ROUTE VISUALIZATION
 // =============================================================================
 
-async function redrawSelectedRoutes() {
+async function redrawSelectedRoutes(animate = true) {
     // Remove existing route lines
     AppState.selectedRouteLines.forEach(({ line }) => AppState.map.removeLayer(line));
     AppState.selectedRouteLines = [];
-    
+
     if (AppState.selectedSegments.length === 0) return;
-    
+
     // Get all airport coordinates
     const airports = new Set();
     AppState.selectedSegments.forEach(seg => {
         airports.add(seg.origin);
         airports.add(seg.destination);
     });
-    
+
     try {
         const coords = await getAirportCoords([...airports]);
-        const allWaypoints = [];
-        
-        for (let i = 0; i < AppState.selectedSegments.length; i++) {
+
+        // Draw completed segments (all but the last) as a solid line
+        const completedWaypoints = [];
+        for (let i = 0; i < AppState.selectedSegments.length - 1; i++) {
             const seg = AppState.selectedSegments[i];
             if (!coords[seg.origin] || !coords[seg.destination]) continue;
-            
             const originCoords = [coords[seg.origin].lat, coords[seg.origin].lon];
             const destCoords = [coords[seg.destination].lat, coords[seg.destination].lon];
             const segmentPath = getGreatCirclePath(originCoords, destCoords);
-            
-            if (i === 0) {
-                allWaypoints.push(...segmentPath);
-            } else {
-                allWaypoints.push(...segmentPath.slice(1));
-            }
+            if (i === 0) completedWaypoints.push(...segmentPath);
+            else completedWaypoints.push(...segmentPath.slice(1));
         }
-        
-        if (allWaypoints.length > 0) {
-            const continuousLine = L.polyline(allWaypoints, {
+
+        if (completedWaypoints.length > 0) {
+            const completedLine = L.polyline(completedWaypoints, {
                 color: '#667eea',
                 weight: 4,
                 opacity: 0.8
             }).addTo(AppState.map);
-            
-            AppState.selectedRouteLines.push({ 
-                line: continuousLine, 
-                segment: AppState.selectedSegments[AppState.selectedSegments.length - 1] 
+            AppState.selectedRouteLines.push({
+                line: completedLine,
+                segment: AppState.selectedSegments[AppState.selectedSegments.length - 2]
+            });
+        }
+
+        // Draw the latest segment (animate if requested)
+        const lastSeg = AppState.selectedSegments[AppState.selectedSegments.length - 1];
+        if (coords[lastSeg.origin] && coords[lastSeg.destination]) {
+            const originCoords = [coords[lastSeg.origin].lat, coords[lastSeg.origin].lon];
+            const destCoords = [coords[lastSeg.destination].lat, coords[lastSeg.destination].lon];
+            const lastPath = getGreatCirclePath(originCoords, destCoords);
+
+            const lastLine = L.polyline(lastPath, {
+                color: '#667eea',
+                weight: 4,
+                opacity: 0.8,
+                className: animate ? 'animated-route' : ''
+            }).addTo(AppState.map);
+
+            AppState.selectedRouteLines.push({
+                line: lastLine,
+                segment: lastSeg
             });
         }
     } catch (error) {
@@ -720,6 +788,9 @@ async function loadFlightsFromAirport(origin, date) {
     // IMPORTANT: Clear old markers immediately to prevent stale data from showing
     clearFlightMarkers();
     AppState.currentFlights = [];
+
+    // Show skeleton placeholders in the flight sidebar
+    showFlightSkeletons(origin);
     
     try {
         AppState.currentOrigin = origin;
@@ -937,11 +1008,44 @@ async function loadFlightsFromAirport(origin, date) {
     }
 }
 
+function showFlightSkeletons(origin) {
+    const sidebar = document.getElementById('flight-sidebar');
+    const flightList = DOM.flightList || document.getElementById('flight-list');
+    if (!flightList) return;
+
+    openSidebar();
+
+    const skeletonCards = Array.from({ length: 5 }, () => `
+        <div class="flight-item skeleton-card">
+            <div class="flight-header">
+                <div><div class="skeleton-line" style="width: 140px; height: 16px;"></div>
+                     <div class="skeleton-line" style="width: 100px; height: 12px; margin-top: 6px;"></div></div>
+                <div style="display: flex; gap: 6px;">
+                    <div class="skeleton-line" style="width: 50px; height: 20px; border-radius: 12px;"></div>
+                    <div class="skeleton-line" style="width: 70px; height: 20px; border-radius: 12px;"></div>
+                </div>
+            </div>
+            <div class="flight-details" style="margin-top: 8px;">
+                <div class="skeleton-line" style="width: 200px; height: 12px;"></div>
+                <div class="skeleton-line" style="width: 120px; height: 12px; margin-top: 4px;"></div>
+                <div class="skeleton-line" style="width: 160px; height: 12px; margin-top: 4px;"></div>
+            </div>
+        </div>
+    `).join('');
+
+    flightList.innerHTML = `
+        <div style="padding: 0.5rem; font-size: 0.85rem; color: var(--color-text-light); text-align: center;">
+            Loading flights from <strong>${origin}</strong>...
+        </div>
+        ${skeletonCards}
+    `;
+}
+
 function displayFlights(flights, origin, keepSidebarOpen = false, direction = 'forward', targetDateRange = null) {
     const sidebar = document.getElementById('flight-sidebar');
     const flightList = document.getElementById('flight-list');
     
-    if (!keepSidebarOpen) sidebar.classList.add('open');
+    if (!keepSidebarOpen) openSidebar();
     
     if (flights.length === 0) {
         const message = direction === 'backward' 
@@ -1024,7 +1128,15 @@ function renderFlightListItems(flights, headerHTML = '', direction = 'forward', 
     const key = flights.map(f => `${f.origin}${f.destination}${f.date}`).join('|') + '|' + direction;
     if (key === AppState._lastRenderedFlightKey && !targetDateRange) return;
     AppState._lastRenderedFlightKey = key;
-    
+
+    // Clean up any previous virtual scroll
+    VirtualScroll.cleanup();
+
+    // Use virtual scrolling for large result sets
+    if (VirtualScroll.init(flights, headerHTML, direction, targetDateRange)) {
+        return; // Virtual scroll took over rendering
+    }
+
     flightList.innerHTML = headerHTML + flights.map((flight, index) => {
         const hasBusiness = flight.business_miles_int > 0;
         const hasPremium = flight.premium_economy_miles_int > 0;
@@ -1351,7 +1463,7 @@ function filterByDestination(airport) {
     
     // Open sidebar to show filtered flights
     const sidebar = document.getElementById('flight-sidebar');
-    if (sidebar) sidebar.classList.add('open');
+    openSidebar();
     
     // Filter from allFlights (complete dataset) not currentFlights (already filtered)
     const flightsToFilter = AppState.allFlights && AppState.allFlights.length > 0 
@@ -1488,6 +1600,9 @@ async function selectFlight(index, origin, destination, date, isDirect, numStops
             distance_miles: distance
         };
         
+        // Save state for undo before modifying
+        UndoRedo.pushUndo();
+
         // Add segment
         if (AppState.planningDirection === 'backward') {
             AppState.selectedSegments.unshift(segment);
@@ -1495,13 +1610,17 @@ async function selectFlight(index, origin, destination, date, isDirect, numStops
         } else {
             AppState.selectedSegments.push(segment);
         }
-        
+
         // Update global reference
         window.selectedSegments = AppState.selectedSegments;
-        
+
+        // Persist to localStorage
+        TripStorage.save();
+
         // Update UI
         redrawSelectedRoutes();
         updateTripSummary();
+        updateProgressBar();
         updateButtons();
         
         // Update table view if active
@@ -1558,21 +1677,12 @@ function undoLast() {
         updateButtons();
         return;
     }
-    
-    // Remove the last segment
-    const removedSegment = AppState.selectedSegments.pop();
-    window.selectedSegments = AppState.selectedSegments;
-    
-    // Remove route line
-    if (AppState.selectedRouteLines.length > 0) {
-        const lastRoute = AppState.selectedRouteLines.pop();
-        if (lastRoute?.line && AppState.map.hasLayer(lastRoute.line)) {
-            AppState.map.removeLayer(lastRoute.line);
-        }
-    }
-    
+
+    // Use undo/redo stack for full state restoration
+    UndoRedo.undo();
+
     clearHighlight();
-    
+
     // Redraw remaining routes
     if (AppState.selectedSegments.length > 0) {
         redrawSelectedRoutes();
@@ -1582,10 +1692,12 @@ function undoLast() {
         });
         AppState.selectedRouteLines = [];
     }
-    
+
     updateTripSummary();
+    updateProgressBar();
     updateButtons();
-    
+    TripStorage.save();
+
     // Reload flights
     setTimeout(() => {
         if (AppState.selectedSegments.length > 0) {
@@ -1593,27 +1705,24 @@ function undoLast() {
             const planningMode = document.getElementById('planning-mode')?.value || 'days';
             const daysToStay = parseInt(document.getElementById('days-to-stay')?.value || '3');
             const isBackward = AppState.planningDirection === 'backward';
-            
+
             let nextFlightDate = lastSeg.date;
             if (planningMode === 'days') {
                 const currentDate = new Date(lastSeg.date);
-                // Backward: subtract days, Forward: add days
                 currentDate.setDate(currentDate.getDate() + (isBackward ? -daysToStay : daysToStay));
                 nextFlightDate = currentDate.toISOString().split('T')[0];
             } else {
                 nextFlightDate = document.getElementById('target-date')?.value || nextFlightDate;
             }
-            
-            // For backward planning, use the origin (where we need to fly FROM)
+
             const nextAirport = isBackward ? lastSeg.origin : lastSeg.destination;
             loadFlightsFromAirport(nextAirport, nextFlightDate);
         } else {
-            // Back to start
             const nextFlightSection = document.getElementById('next-flight-section');
             if (nextFlightSection) nextFlightSection.style.display = 'none';
-            
+
             clearFlightMarkers();
-            
+
             const startDate = document.getElementById('start-date').value;
             if (AppState.startingAirports.length > 0 && startDate) {
                 loadFlightsFromAirport(AppState.startingAirports[0], startDate);
@@ -1622,23 +1731,33 @@ function undoLast() {
     }, 50);
 }
 
+function redoLast() {
+    UndoRedo.redo();
+    TripStorage.save();
+}
+
 async function clearAll() {
     if (AppState.isLoadingFlights || AppState.isSelectingFlight) return;
     if (!(await showConfirm('Clear all segments?'))) return;
-    
+
+    // Save state for undo before clearing
+    UndoRedo.pushUndo();
+
     AppState.selectedSegments = [];
     window.selectedSegments = AppState.selectedSegments;
-    
+
     AppState.selectedRouteLines.forEach(({ line }) => AppState.map.removeLayer(line));
     AppState.selectedRouteLines = [];
-    
+
     const nextFlightSection = document.getElementById('next-flight-section');
     if (nextFlightSection) nextFlightSection.style.display = 'none';
-    
+
     clearMap();
     updateTripSummary();
+    updateProgressBar();
     updateButtons();
-    
+    TripStorage.save();
+
     const startDate = document.getElementById('start-date').value;
     if (AppState.startingAirports.length > 0 && startDate) {
         loadFlightsFromAirport(AppState.startingAirports[0], startDate);
@@ -1659,8 +1778,10 @@ function editSegmentDate(segmentIndex) {
         showError('Invalid date format. Please use YYYY-MM-DD');
         return;
     }
-    
+
+    UndoRedo.pushUndo();
     segment.date = newDate;
+    TripStorage.save();
     redrawSelectedRoutes();
     updateTripSummary();
     
@@ -1706,8 +1827,9 @@ function updateTripSummary() {
         }
         
         return `
-            <div class="trip-segment" data-segment-index="${index}">
+            <div class="trip-segment" data-segment-index="${index}" draggable="true" style="cursor: grab;">
                 <div class="trip-segment-header">
+                    <span class="drag-handle" title="Drag to reorder">⠿</span>
                     Segment ${seg.segment}: ${seg.origin} → ${seg.destination}
                     <button onclick="editSegmentDate(${index})" style="margin-left: 0.5rem; padding: 2px 6px; background: #667eea; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.7rem;">Edit Date</button>
                 </div>
@@ -1803,6 +1925,9 @@ function updateTripSummary() {
         `;
         requirementsDiv.style.display = 'block';
     }
+
+    // Keep progress bar in sync
+    updateProgressBar();
 }
 
 async function copyTripToClipboard() {
@@ -1960,9 +2085,11 @@ function updateButtons() {
     const clearBtn = document.getElementById('clear-btn');
     const validateBtn = document.getElementById('validate-btn');
     const copyBtn = document.getElementById('copy-trip-btn');
-    
+    const exportBtn = document.getElementById('export-trip-btn');
+    const shareBtn = document.getElementById('share-trip-btn');
+
     const hasSegments = AppState.selectedSegments.length > 0;
-    
+
     if (undoBtn) {
         undoBtn.disabled = !hasSegments;
         undoBtn.style.opacity = hasSegments ? '1' : '0.5';
@@ -1973,6 +2100,15 @@ function updateButtons() {
         copyBtn.disabled = !hasSegments;
         copyBtn.style.opacity = hasSegments ? '1' : '0.5';
     }
+    if (exportBtn) {
+        exportBtn.disabled = !hasSegments;
+        exportBtn.style.opacity = hasSegments ? '1' : '0.5';
+    }
+    if (shareBtn) {
+        shareBtn.disabled = !hasSegments;
+        shareBtn.style.opacity = hasSegments ? '1' : '0.5';
+    }
+    UndoRedo._updateButtons();
 }
 
 async function validateTrip() {
@@ -2006,6 +2142,7 @@ async function validateTrip() {
         
         resultsDiv.innerHTML = html;
         modal.classList.add('show');
+        document.body.classList.add('modal-open');
     } catch (error) {
         console.error('Error validating trip:', error);
         showError('Failed to validate trip');
@@ -2141,10 +2278,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('copy-trip-btn')?.addEventListener('click', copyTripToClipboard);
     document.getElementById('validate-btn')?.addEventListener('click', validateTrip);
     
-    // Sidebar close
-    document.getElementById('close-sidebar')?.addEventListener('click', () => {
-        document.getElementById('flight-sidebar').classList.remove('open');
-    });
+    // Sidebar close — with iOS body scroll lock
+    document.getElementById('close-sidebar')?.addEventListener('click', closeSidebar);
 
     // Touch support for flight item route highlighting (mirrors mouse hover behaviour)
     // Uses event delegation on the flight list container so it works for dynamically rendered items.
@@ -2182,13 +2317,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Modal close
+    // Modal close — with iOS body scroll lock
     document.querySelector('.close-modal')?.addEventListener('click', () => {
         document.getElementById('validation-modal').classList.remove('show');
+        document.body.classList.remove('modal-open');
     });
-    
+
     document.getElementById('validation-modal')?.addEventListener('click', (e) => {
-        if (e.target.id === 'validation-modal') e.target.classList.remove('show');
+        if (e.target.id === 'validation-modal') {
+            e.target.classList.remove('show');
+            document.body.classList.remove('modal-open');
+        }
     });
     
     // Tab navigation
@@ -2199,9 +2338,970 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
+    // Dark mode
+    DarkMode.init();
+    document.getElementById('dark-mode-toggle')?.addEventListener('click', DarkMode.toggle);
+
+    // Redo button
+    document.getElementById('redo-btn')?.addEventListener('click', redoLast);
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y = redo
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            undoLast();
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+            e.preventDefault();
+            redoLast();
+        }
+    });
+
+    // Save/load trip buttons
+    document.getElementById('save-trip-btn')?.addEventListener('click', () => {
+        TripStorage.save();
+        const btn = document.getElementById('save-trip-btn');
+        if (btn) { const orig = btn.textContent; btn.textContent = '✓ Saved!'; setTimeout(() => btn.textContent = orig, 1500); }
+    });
+    document.getElementById('export-trip-btn')?.addEventListener('click', exportTrip);
+    document.getElementById('share-trip-btn')?.addEventListener('click', () => TripShare.shareTrip());
+    document.getElementById('import-trip-input')?.addEventListener('change', (e) => {
+        if (e.target.files[0]) importTrip(e.target.files[0]);
+        e.target.value = '';
+    });
+
+    // Check for shared trip in URL hash first, then localStorage
+    TripShare.loadFromURL().then(fromURL => {
+        if (!fromURL) {
+            TripStorage.restore();
+        }
+        updateProgressBar();
+    });
+
     // Table view initialization
     initTableView();
+
+    // Initialize drag-to-reorder for trip segments
+    SegmentDrag.init();
+
+    // Show onboarding for first-time visitors (after a short delay for map to load)
+    setTimeout(() => Onboarding.start(), 800);
 });
+
+// =============================================================================
+// TRIP PERSISTENCE (localStorage save/load)
+// =============================================================================
+
+const TripStorage = (() => {
+    const STORAGE_KEY = 'rtw_planner_trip';
+    const SETTINGS_KEY = 'rtw_planner_settings';
+
+    function save() {
+        if (AppState.selectedSegments.length === 0) {
+            localStorage.removeItem(STORAGE_KEY);
+            return;
+        }
+        const data = {
+            segments: AppState.selectedSegments,
+            savedAt: new Date().toISOString(),
+            settings: {
+                startingAirports: AppState.startingAirports,
+                startDate: document.getElementById('start-date')?.value,
+                endDate: document.getElementById('end-date')?.value,
+                mustVisitCities: document.getElementById('must-visit-cities')?.value,
+                planningDirection: document.getElementById('planning-direction')?.value,
+                milesProgram: document.getElementById('miles-program')?.value,
+                cabinFilter: document.getElementById('cabin-filter')?.value,
+                dateRange: document.getElementById('date-range')?.value
+            }
+        };
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {
+            console.warn('Failed to save trip to localStorage:', e);
+        }
+    }
+
+    function load() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) {
+            console.warn('Failed to load trip from localStorage:', e);
+            return null;
+        }
+    }
+
+    function clear() {
+        localStorage.removeItem(STORAGE_KEY);
+    }
+
+    function restore() {
+        const data = load();
+        if (!data || !data.segments || data.segments.length === 0) return false;
+
+        // Restore settings first
+        const s = data.settings || {};
+        if (s.startDate) { const el = document.getElementById('start-date'); if (el) el.value = s.startDate; }
+        if (s.endDate) { const el = document.getElementById('end-date'); if (el) el.value = s.endDate; }
+        if (s.mustVisitCities) { const el = document.getElementById('must-visit-cities'); if (el) el.value = s.mustVisitCities; }
+        if (s.planningDirection) { const el = document.getElementById('planning-direction'); if (el) el.value = s.planningDirection; }
+        if (s.milesProgram) { const el = document.getElementById('miles-program'); if (el) el.value = s.milesProgram; }
+        if (s.cabinFilter) { const el = document.getElementById('cabin-filter'); if (el) el.value = s.cabinFilter; }
+        if (s.dateRange) { const el = document.getElementById('date-range'); if (el) el.value = s.dateRange; }
+
+        if (s.startingAirports) AppState.startingAirports = s.startingAirports;
+        if (s.planningDirection) AppState.planningDirection = s.planningDirection;
+
+        // Restore segments
+        AppState.selectedSegments = data.segments;
+        window.selectedSegments = AppState.selectedSegments;
+
+        redrawSelectedRoutes();
+        updateTripSummary();
+        updateProgressBar();
+        updateButtons();
+        return true;
+    }
+
+    return { save, load, clear, restore };
+})();
+
+// =============================================================================
+// TRIP SHARING VIA URL
+// =============================================================================
+
+const TripShare = (() => {
+    /**
+     * Encode the current trip into a compact URL hash.
+     * Format: each segment is "ORIG-DEST-DATE-CABIN" joined by "~"
+     * e.g. #trip=JFK-LHR-2026-04-01-B~LHR-SIN-2026-04-05-P
+     */
+    function encode(segments) {
+        if (!segments || segments.length === 0) return '';
+        const parts = segments.map(seg => {
+            const cabin = seg.cabin_class === 'Business' ? 'B'
+                : seg.cabin_class === 'Premium Economy' ? 'W' : 'Y';
+            return `${seg.origin}-${seg.destination}-${seg.date}-${cabin}`;
+        });
+        return parts.join('~');
+    }
+
+    function decode(hash) {
+        if (!hash) return null;
+        const raw = hash.replace(/^#?trip=/, '');
+        if (!raw) return null;
+        const parts = raw.split('~');
+        const segments = [];
+        for (const part of parts) {
+            // Format: ORIG-DEST-YYYY-MM-DD-CABIN
+            const m = part.match(/^([A-Z]{3})-([A-Z]{3})-(\d{4}-\d{2}-\d{2})-([BWY])$/);
+            if (!m) return null; // invalid format
+            const cabinMap = { B: 'Business', W: 'Premium Economy', Y: 'Economy' };
+            segments.push({
+                segment: segments.length + 1,
+                origin: m[1],
+                destination: m[2],
+                date: m[3],
+                cabin_class: cabinMap[m[4]],
+                is_direct: false,
+                num_stops: 0,
+                business_miles_int: m[4] === 'B' ? 1 : 0,
+                premium_economy_miles_int: m[4] === 'W' ? 1 : 0,
+                economy_miles_int: m[4] === 'Y' ? 1 : 0,
+                business_carriers: '',
+                premium_economy_carriers: '',
+                economy_carriers: '',
+                distance_miles: 0 // will be recalculated on load
+            });
+        }
+        return segments;
+    }
+
+    async function shareTrip() {
+        if (AppState.selectedSegments.length === 0) {
+            showError('No trip to share');
+            return;
+        }
+        const encoded = encode(AppState.selectedSegments);
+        const url = `${window.location.origin}${window.location.pathname}#trip=${encoded}`;
+
+        try {
+            await navigator.clipboard.writeText(url);
+            showError('Share link copied to clipboard!');
+        } catch {
+            // Fallback: show URL in prompt
+            prompt('Copy this link to share your trip:', url);
+        }
+    }
+
+    async function loadFromURL() {
+        const hash = window.location.hash;
+        if (!hash || !hash.startsWith('#trip=')) return false;
+
+        const segments = decode(hash);
+        if (!segments || segments.length === 0) return false;
+
+        // Recalculate distances
+        const airports = new Set();
+        segments.forEach(s => { airports.add(s.origin); airports.add(s.destination); });
+        try {
+            const coords = await getAirportCoords([...airports]);
+            for (const seg of segments) {
+                if (coords[seg.origin] && coords[seg.destination]) {
+                    const o = [coords[seg.origin].lat, coords[seg.origin].lon];
+                    const d = [coords[seg.destination].lat, coords[seg.destination].lon];
+                    seg.distance_miles = calculateDistance(o, d);
+                }
+            }
+        } catch { /* distances stay 0 */ }
+
+        AppState.selectedSegments = segments;
+        window.selectedSegments = segments;
+        redrawSelectedRoutes();
+        updateTripSummary();
+        updateProgressBar();
+        updateButtons();
+        TripStorage.save();
+
+        // Clean hash from URL without triggering reload
+        history.replaceState(null, '', window.location.pathname);
+        return true;
+    }
+
+    return { shareTrip, loadFromURL, encode, decode };
+})();
+
+function exportTrip() {
+    if (AppState.selectedSegments.length === 0) {
+        showError('No trip to export');
+        return;
+    }
+    const data = {
+        segments: AppState.selectedSegments,
+        exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rtw-trip-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importTrip(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!data.segments || !Array.isArray(data.segments) || data.segments.length === 0) {
+                showError('Invalid trip file: no segments found');
+                return;
+            }
+            AppState.selectedSegments = data.segments;
+            window.selectedSegments = AppState.selectedSegments;
+            redrawSelectedRoutes();
+            updateTripSummary();
+            updateProgressBar();
+            updateButtons();
+            TripStorage.save();
+            showError('Trip imported successfully!');
+        } catch (err) {
+            showError('Failed to parse trip file');
+        }
+    };
+    reader.readAsText(file);
+}
+
+// =============================================================================
+// UNDO / REDO STACK
+// =============================================================================
+
+const UndoRedo = (() => {
+    const undoStack = [];
+    const redoStack = [];
+    const MAX_HISTORY = 50;
+
+    function snapshot() {
+        return JSON.parse(JSON.stringify(AppState.selectedSegments));
+    }
+
+    function pushUndo() {
+        undoStack.push(snapshot());
+        if (undoStack.length > MAX_HISTORY) undoStack.shift();
+        // Any new action clears the redo stack
+        redoStack.length = 0;
+        _updateButtons();
+    }
+
+    function undo() {
+        if (undoStack.length === 0) return;
+        redoStack.push(snapshot());
+        const prev = undoStack.pop();
+        _applyState(prev);
+        _updateButtons();
+    }
+
+    function redo() {
+        if (redoStack.length === 0) return;
+        undoStack.push(snapshot());
+        const next = redoStack.pop();
+        _applyState(next);
+        _updateButtons();
+    }
+
+    function _applyState(segments) {
+        AppState.selectedSegments = segments;
+        window.selectedSegments = AppState.selectedSegments;
+        redrawSelectedRoutes();
+        updateTripSummary();
+        updateProgressBar();
+        updateButtons();
+        TripStorage.save();
+    }
+
+    function _updateButtons() {
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        if (undoBtn) {
+            undoBtn.disabled = undoStack.length === 0 && AppState.selectedSegments.length === 0;
+        }
+        if (redoBtn) {
+            redoBtn.disabled = redoStack.length === 0;
+            redoBtn.style.opacity = redoStack.length > 0 ? '1' : '0.5';
+        }
+    }
+
+    function clear() {
+        undoStack.length = 0;
+        redoStack.length = 0;
+        _updateButtons();
+    }
+
+    return { pushUndo, undo, redo, clear, _updateButtons };
+})();
+
+// =============================================================================
+// VISUAL PROGRESS BAR
+// =============================================================================
+
+function updateProgressBar() {
+    const bar = document.getElementById('trip-progress-bar');
+    if (!bar) return;
+
+    const segments = AppState.selectedSegments;
+    if (segments.length === 0) {
+        bar.style.display = 'none';
+        return;
+    }
+    bar.style.display = 'block';
+
+    const validation = RTWValidator.validate(segments);
+    const totalDistance = validation.total_distance_miles;
+    const distancePct = Math.min((totalDistance / 35000) * 100, 100);
+    const segmentPct = Math.min((validation.num_segments / 3) * 100, 100);
+    const continentPct = Math.min((validation.num_continents / 3) * 100, 100);
+
+    // Distance bar
+    const distFill = bar.querySelector('.progress-distance-fill');
+    const distLabel = bar.querySelector('.progress-distance-label');
+    if (distFill) {
+        distFill.style.width = distancePct + '%';
+        distFill.className = 'progress-fill progress-distance-fill' + (totalDistance > 35000 ? ' over-limit' : totalDistance > 33250 ? ' near-limit' : '');
+    }
+    if (distLabel) distLabel.textContent = `${Math.round(totalDistance).toLocaleString()} / 35,000 mi`;
+
+    // Checklist items
+    const items = bar.querySelectorAll('.progress-check');
+    items.forEach(item => {
+        const check = item.dataset.check;
+        let done = false;
+        if (check === 'segments') done = validation.num_segments >= 3;
+        else if (check === 'atlantic') done = validation.atlantic_crossed;
+        else if (check === 'pacific') done = validation.pacific_crossed;
+        else if (check === 'continents') done = validation.num_continents >= 3;
+        else if (check === 'return') done = !validation.errors.some(e => e.includes('return to origin'));
+        item.classList.toggle('done', done);
+    });
+}
+
+// =============================================================================
+// DARK MODE
+// =============================================================================
+
+const DarkMode = (() => {
+    const STORAGE_KEY = 'rtw_planner_dark_mode';
+
+    function isEnabled() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored !== null) return stored === 'true';
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    function apply(enabled) {
+        document.documentElement.classList.toggle('dark', enabled);
+        document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', enabled ? 'dark' : 'light');
+        localStorage.setItem(STORAGE_KEY, String(enabled));
+        const btn = document.getElementById('dark-mode-toggle');
+        if (btn) btn.textContent = enabled ? '☀️' : '🌙';
+    }
+
+    function toggle() {
+        apply(!document.documentElement.classList.contains('dark'));
+    }
+
+    function init() {
+        apply(isEnabled());
+    }
+
+    return { init, toggle };
+})();
+
+// =============================================================================
+// ONBOARDING WALKTHROUGH
+// =============================================================================
+
+const Onboarding = (() => {
+    const STORAGE_KEY = 'rtw_planner_onboarding_done';
+    const steps = [
+        {
+            target: '#starting-airports',
+            text: 'Start here: enter the airport(s) you want to depart from and return to.',
+            position: 'right'
+        },
+        {
+            target: '#start-date',
+            text: 'Set your departure date and return date for the trip window.',
+            position: 'right'
+        },
+        {
+            target: '#load-flights-btn',
+            text: 'Click "Load Flights" to search for available award flights on the map.',
+            position: 'right'
+        },
+        {
+            target: '#map',
+            text: 'Click routes on the map to add segments to your itinerary. The progress bar tracks your RTW requirements.',
+            position: 'left'
+        }
+    ];
+
+    let currentStep = 0;
+    let overlay = null;
+
+    function shouldShow() {
+        return !localStorage.getItem(STORAGE_KEY);
+    }
+
+    function start() {
+        if (!shouldShow()) return;
+        currentStep = 0;
+        showStep();
+    }
+
+    function dismiss() {
+        localStorage.setItem(STORAGE_KEY, 'true');
+        cleanup();
+    }
+
+    function cleanup() {
+        if (overlay) {
+            overlay.remove();
+            overlay = null;
+        }
+        document.querySelector('.onboarding-highlight')?.classList.remove('onboarding-highlight');
+    }
+
+    function showStep() {
+        cleanup();
+
+        if (currentStep >= steps.length) {
+            dismiss();
+            return;
+        }
+
+        const step = steps[currentStep];
+        const target = document.querySelector(step.target);
+        if (!target) {
+            currentStep++;
+            showStep();
+            return;
+        }
+
+        // Highlight target
+        target.classList.add('onboarding-highlight');
+
+        // Create overlay
+        overlay = document.createElement('div');
+        overlay.className = 'onboarding-overlay';
+        overlay.innerHTML = `
+            <div class="onboarding-backdrop"></div>
+            <div class="onboarding-tooltip onboarding-${step.position}">
+                <div class="onboarding-step-indicator">Step ${currentStep + 1} of ${steps.length}</div>
+                <p>${step.text}</p>
+                <div class="onboarding-actions">
+                    <button class="onboarding-skip">Skip tour</button>
+                    <button class="onboarding-next btn btn-primary">${currentStep < steps.length - 1 ? 'Next' : 'Got it!'}</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        // Position tooltip near target
+        const tooltip = overlay.querySelector('.onboarding-tooltip');
+        const rect = target.getBoundingClientRect();
+
+        if (step.position === 'right') {
+            tooltip.style.top = `${rect.top + window.scrollY}px`;
+            tooltip.style.left = `${rect.right + 12}px`;
+        } else {
+            tooltip.style.top = `${rect.top + window.scrollY + rect.height / 2}px`;
+            tooltip.style.right = `${window.innerWidth - rect.left + 12}px`;
+        }
+
+        // Clamp to viewport
+        requestAnimationFrame(() => {
+            const tRect = tooltip.getBoundingClientRect();
+            if (tRect.right > window.innerWidth - 10) {
+                tooltip.style.left = 'auto';
+                tooltip.style.right = '10px';
+            }
+            if (tRect.bottom > window.innerHeight - 10) {
+                tooltip.style.top = `${window.innerHeight - tRect.height - 10}px`;
+            }
+        });
+
+        overlay.querySelector('.onboarding-next').addEventListener('click', () => {
+            currentStep++;
+            showStep();
+        });
+        overlay.querySelector('.onboarding-skip').addEventListener('click', dismiss);
+        overlay.querySelector('.onboarding-backdrop').addEventListener('click', dismiss);
+    }
+
+    return { start, dismiss, shouldShow };
+})();
+
+// =============================================================================
+// CALENDAR HEATMAP
+// =============================================================================
+
+async function showCalendarHeatmap(origin, destination) {
+    const milesProgram = document.getElementById('miles-program')?.value || 'qantas';
+    const startDate = document.getElementById('start-date')?.value || new Date().toISOString().slice(0, 10);
+    const endDateRaw = document.getElementById('end-date')?.value;
+
+    // Default to 30 days from start
+    const sd = new Date(startDate);
+    const ed = endDateRaw ? new Date(endDateRaw) : new Date(sd.getTime() + 30 * 86400000);
+    const endDate = ed.toISOString().slice(0, 10);
+
+    const flightList = DOM.flightList || document.getElementById('flight-list');
+    if (!flightList) return;
+    openSidebar();
+
+    flightList.innerHTML = `
+        <div style="padding: 1rem; text-align: center;">
+            <div class="loading-spinner" style="margin: 0 auto 8px; width: 32px; height: 32px;"></div>
+            <div style="font-size: 0.85rem; color: var(--color-text-light);">Loading calendar for ${origin} → ${destination}...</div>
+        </div>
+    `;
+
+    try {
+        const resp = await fetch(`/api/availability-calendar?origin=${origin}&destination=${destination}&start_date=${startDate}&end_date=${endDate}&source=${milesProgram}`);
+        const data = await resp.json();
+        if (data.error) { showError(data.error); return; }
+
+        renderCalendar(origin, destination, data.days, sd, ed);
+    } catch (err) {
+        showError('Failed to load calendar');
+    }
+}
+
+function renderCalendar(origin, destination, dayCounts, startDate, endDate) {
+    const flightList = DOM.flightList || document.getElementById('flight-list');
+    if (!flightList) return;
+
+    const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    // Iterate month by month
+    let html = `
+        <div class="calendar-heatmap-header">
+            <h4>${origin} → ${destination}</h4>
+            <button onclick="backToFlightList()" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">← Back to flights</button>
+        </div>
+        <div class="calendar-legend">
+            <span class="cal-legend-item"><span class="cal-cell cal-none" style="display:inline-block;width:16px;height:16px;"></span> None</span>
+            <span class="cal-legend-item"><span class="cal-cell cal-low" style="display:inline-block;width:16px;height:16px;"></span> 1</span>
+            <span class="cal-legend-item"><span class="cal-cell cal-med" style="display:inline-block;width:16px;height:16px;"></span> 2-3</span>
+            <span class="cal-legend-item"><span class="cal-cell cal-high" style="display:inline-block;width:16px;height:16px;"></span> 4+</span>
+        </div>
+    `;
+
+    // Build months
+    const current = new Date(startDate);
+    current.setDate(1); // Start from 1st of month
+    const end = new Date(endDate);
+
+    while (current <= end) {
+        const year = current.getFullYear();
+        const month = current.getMonth();
+        const monthName = current.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const firstDay = new Date(year, month, 1).getDay();
+
+        html += `<div class="cal-month"><div class="cal-month-title">${monthName}</div>`;
+        html += `<div class="cal-grid">`;
+        // Day headers
+        DAYS.forEach(d => { html += `<div class="cal-day-header">${d}</div>`; });
+        // Empty cells before first day
+        for (let i = 0; i < firstDay; i++) html += `<div class="cal-cell cal-empty"></div>`;
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dateObj = new Date(year, month, d);
+            const info = dayCounts[dateStr];
+            const total = info ? info.total : 0;
+            const inRange = dateObj >= startDate && dateObj <= end;
+
+            let cls = 'cal-none';
+            if (total >= 4) cls = 'cal-high';
+            else if (total >= 2) cls = 'cal-med';
+            else if (total >= 1) cls = 'cal-low';
+
+            const tooltip = info
+                ? `${dateStr}\nBusiness: ${info.business}, Premium: ${info.premium}, Economy: ${info.economy}`
+                : `${dateStr}\nNo availability`;
+
+            const opacity = inRange ? '' : 'opacity: 0.3;';
+            html += `<div class="cal-cell ${cls}" title="${tooltip}" style="${opacity}" data-date="${dateStr}">${d}</div>`;
+        }
+
+        html += `</div></div>`;
+        current.setMonth(current.getMonth() + 1);
+    }
+
+    flightList.innerHTML = html;
+
+    // Make calendar cells clickable to search that specific date
+    flightList.querySelectorAll('.cal-cell[data-date]').forEach(cell => {
+        cell.addEventListener('click', () => {
+            const date = cell.dataset.date;
+            loadFlightsFromAirport(origin, date);
+        });
+    });
+}
+
+function backToFlightList() {
+    if (AppState.currentOrigin && AppState.currentDate) {
+        loadFlightsFromAirport(AppState.currentOrigin, AppState.currentDate);
+    }
+}
+
+// =============================================================================
+// VIRTUAL SCROLLING FOR FLIGHT LIST
+// =============================================================================
+
+const VirtualScroll = (() => {
+    const ITEM_HEIGHT = 110; // approximate height of a flight card in px
+    const BUFFER = 5; // extra items above/below viewport
+    let container = null;
+    let allItems = [];
+    let headerHTML = '';
+    let scrollHandler = null;
+
+    function init(flights, header, direction, targetDateRange) {
+        container = DOM.flightList || document.getElementById('flight-list');
+        if (!container || flights.length <= 30) {
+            // Below threshold, render all items directly (no virtual scrolling needed)
+            return false;
+        }
+
+        allItems = flights;
+        headerHTML = header;
+
+        // Pre-build all item HTML strings (lightweight, just strings — not DOM nodes)
+        const itemHTMLs = flights.map((flight, index) => buildFlightItemHTML(flight, index, direction, targetDateRange));
+
+        const totalHeight = flights.length * ITEM_HEIGHT;
+
+        container.innerHTML = `
+            ${headerHTML}
+            <div class="virtual-scroll-info" style="padding: 0.5rem; font-size: 0.8rem; color: var(--color-text-muted); text-align: center;">
+                ${flights.length} flights — scroll to see more
+            </div>
+            <div class="virtual-scroll-container" style="position: relative; height: ${totalHeight}px; overflow: visible;">
+                <div class="virtual-scroll-items"></div>
+            </div>
+        `;
+
+        const itemsContainer = container.querySelector('.virtual-scroll-items');
+
+        // Remove old scroll handler if any
+        if (scrollHandler) {
+            container.closest('.sidebar-content')?.removeEventListener('scroll', scrollHandler);
+        }
+
+        const scrollParent = container.closest('.sidebar-content') || container;
+
+        scrollHandler = () => {
+            const scrollTop = scrollParent.scrollTop;
+            const viewportHeight = scrollParent.clientHeight;
+
+            const startIdx = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - BUFFER);
+            const endIdx = Math.min(flights.length, Math.ceil((scrollTop + viewportHeight) / ITEM_HEIGHT) + BUFFER);
+
+            let html = '';
+            for (let i = startIdx; i < endIdx; i++) {
+                html += `<div style="position: absolute; top: ${i * ITEM_HEIGHT}px; left: 0; right: 0;">${itemHTMLs[i]}</div>`;
+            }
+            itemsContainer.innerHTML = html;
+        };
+
+        scrollParent.addEventListener('scroll', scrollHandler, { passive: true });
+        scrollHandler(); // initial render
+
+        return true;
+    }
+
+    function cleanup() {
+        if (scrollHandler) {
+            const container = DOM.flightList || document.getElementById('flight-list');
+            const scrollParent = container?.closest('.sidebar-content') || container;
+            scrollParent?.removeEventListener('scroll', scrollHandler);
+            scrollHandler = null;
+        }
+        allItems = [];
+    }
+
+    return { init, cleanup };
+})();
+
+function buildFlightItemHTML(flight, index, direction, targetDateRange) {
+    const hasBusiness = flight.business_miles_int > 0;
+    const hasPremium = flight.premium_economy_miles_int > 0;
+    const hasEconomy = flight.economy_miles_int > 0;
+
+    let cabinClass, miles, carriers;
+    if (hasBusiness) { cabinClass = 'Business'; miles = flight.business_miles; carriers = flight.business_carriers; }
+    else if (hasPremium) { cabinClass = 'Premium Economy'; miles = flight.premium_economy_miles; carriers = flight.premium_economy_carriers; }
+    else { cabinClass = 'Economy'; miles = flight.economy_miles; carriers = flight.economy_carriers; }
+
+    const availableClasses = [];
+    if (hasBusiness) availableClasses.push('Business');
+    if (hasPremium) availableClasses.push('Premium');
+    if (hasEconomy) availableClasses.push('Economy');
+    const classesDisplay = availableClasses.length > 1 ? ` (${availableClasses.join(', ')})` : '';
+
+    const checkCity = direction === 'backward' ? flight.origin : flight.destination;
+    const isMustVisit = AppState.mustVisitCities.includes(checkCity);
+    const mustVisitBadge = isMustVisit ? '<span class="flight-badge" style="background: #FF6B6B; color: white;">Must Visit</span>' : '';
+
+    let isWithinRange = false;
+    if (targetDateRange) {
+        const flightDate = new Date(flight.date);
+        isWithinRange = flightDate >= targetDateRange.start && flightDate <= targetDateRange.end;
+    }
+    const borderStyle = isWithinRange ? 'border: 3px solid #4CAF50;' : '';
+    const rangeIndicator = isWithinRange ? '<span style="color: #4CAF50; font-size: 0.75rem; margin-left: 0.5rem;">✓ In Range</span>' : '';
+
+    const escapedBusinessCarriers = (flight.business_carriers || '').replace(/'/g, "\\'");
+    const escapedPremiumCarriers = (flight.premium_economy_carriers || '').replace(/'/g, "\\'");
+    const escapedEconomyCarriers = (flight.economy_carriers || '').replace(/'/g, "\\'");
+    const flightIndex = flight._originalIndex !== undefined ? flight._originalIndex : index;
+
+    return `
+        <div class="flight-item"
+             data-flight-index="${flightIndex}"
+             data-origin="${flight.origin}"
+             data-dest="${flight.destination}"
+             style="${borderStyle}"
+             onmouseenter="highlightRoute('${flight.origin}', '${flight.destination}')"
+             onmouseleave="clearHighlight()"
+             onclick="selectFlight(${flightIndex}, '${flight.origin}', '${flight.destination}', '${flight.date}', ${flight.is_direct}, ${flight.num_stops}, ${flight.business_miles_int || 0}, ${flight.premium_economy_miles_int || 0}, ${flight.economy_miles_int || 0}, '${escapedBusinessCarriers}', '${escapedPremiumCarriers}', '${escapedEconomyCarriers}')">
+            <div class="flight-header">
+                <div>
+                    <span class="flight-route">${flight.origin} → ${flight.destination} ${mustVisitBadge}${rangeIndicator}</span>
+                    <div class="flight-date">${formatDate(flight.date)}</div>
+                </div>
+                <div>
+                    ${flight.is_direct ? '<span class="flight-badge badge-direct">Direct</span>' : `<span class="flight-badge badge-stops">${flight.num_stops} stop${flight.num_stops > 1 ? 's' : ''}</span>`}
+                    <span class="flight-badge badge-${cabinClass.toLowerCase().replace(' ', '-')}">${cabinClass}${classesDisplay}</span>
+                </div>
+            </div>
+            <div class="flight-details">
+                ${flight.origin_name || flight.origin} → ${flight.destination_name || flight.destination}<br>
+                ${miles ? `${parseInt(miles).toLocaleString()} miles` : 'N/A'}
+                <button onclick="event.stopPropagation(); showCalendarHeatmap('${flight.origin}', '${flight.destination}')" class="cal-btn" title="View availability calendar">📅</button><br>
+                <strong style="color: var(--color-primary);">Airlines:</strong> ${carriers || 'N/A'}
+            </div>
+        </div>
+    `;
+}
+
+// =============================================================================
+// DRAG-TO-REORDER TRIP SEGMENTS
+// =============================================================================
+
+const SegmentDrag = (() => {
+    let dragIdx = null;
+    let placeholder = null;
+
+    function init() {
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        if (!summaryDiv) return;
+
+        summaryDiv.addEventListener('dragstart', onDragStart);
+        summaryDiv.addEventListener('dragover', onDragOver);
+        summaryDiv.addEventListener('dragend', onDragEnd);
+        summaryDiv.addEventListener('drop', onDrop);
+
+        // Touch support
+        summaryDiv.addEventListener('touchstart', onTouchStart, { passive: false });
+        summaryDiv.addEventListener('touchmove', onTouchMove, { passive: false });
+        summaryDiv.addEventListener('touchend', onTouchEnd);
+    }
+
+    function onDragStart(e) {
+        const seg = e.target.closest('.trip-segment[data-segment-index]');
+        if (!seg) return;
+        dragIdx = parseInt(seg.dataset.segmentIndex);
+        seg.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragIdx);
+    }
+
+    function onDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const target = e.target.closest('.trip-segment[data-segment-index]');
+        if (!target) return;
+
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        // Remove existing drop indicators
+        summaryDiv.querySelectorAll('.trip-segment').forEach(s => s.classList.remove('drag-over'));
+        target.classList.add('drag-over');
+    }
+
+    function onDrop(e) {
+        e.preventDefault();
+        const target = e.target.closest('.trip-segment[data-segment-index]');
+        if (!target || dragIdx === null) return;
+
+        const dropIdx = parseInt(target.dataset.segmentIndex);
+        if (dropIdx !== dragIdx) {
+            reorderSegments(dragIdx, dropIdx);
+        }
+        onDragEnd(e);
+    }
+
+    function onDragEnd(e) {
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        summaryDiv?.querySelectorAll('.trip-segment').forEach(s => {
+            s.classList.remove('dragging', 'drag-over');
+        });
+        dragIdx = null;
+    }
+
+    // Touch drag support
+    let touchStartY = 0;
+    let touchElement = null;
+
+    function onTouchStart(e) {
+        const seg = e.target.closest('.trip-segment[data-segment-index]');
+        if (!seg) return;
+
+        // Only start drag on the drag handle or segment header (not buttons)
+        if (e.target.closest('button') && !e.target.closest('.drag-handle')) return;
+
+        dragIdx = parseInt(seg.dataset.segmentIndex);
+        touchStartY = e.touches[0].clientY;
+        touchElement = seg;
+
+        // Long-press to initiate drag (400ms for iOS — avoids conflict with scroll)
+        seg._touchTimer = setTimeout(() => {
+            seg.classList.add('dragging');
+            // Visual feedback: scale up slightly as drag-start indicator
+            seg.style.transform = 'scale(1.03)';
+            seg.style.zIndex = '100';
+            seg.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+        }, 400);
+    }
+
+    function onTouchMove(e) {
+        // Cancel long-press if finger moves more than 10px before timer fires
+        if (dragIdx !== null && touchElement && !touchElement.classList.contains('dragging')) {
+            const dy = Math.abs(e.touches[0].clientY - touchStartY);
+            if (dy > 10 && touchElement._touchTimer) {
+                clearTimeout(touchElement._touchTimer);
+                touchElement._touchTimer = null;
+            }
+            return;
+        }
+        if (dragIdx === null || !touchElement?.classList.contains('dragging')) {
+            if (touchElement?._touchTimer) clearTimeout(touchElement._touchTimer);
+            return;
+        }
+        e.preventDefault();
+
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.trip-segment[data-segment-index]');
+
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        summaryDiv?.querySelectorAll('.trip-segment').forEach(s => s.classList.remove('drag-over'));
+        if (target && target !== touchElement) {
+            target.classList.add('drag-over');
+        }
+    }
+
+    function onTouchEnd(e) {
+        if (touchElement?._touchTimer) clearTimeout(touchElement._touchTimer);
+
+        if (dragIdx !== null && touchElement?.classList.contains('dragging')) {
+            const touch = e.changedTouches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.trip-segment[data-segment-index]');
+            if (target) {
+                const dropIdx = parseInt(target.dataset.segmentIndex);
+                if (dropIdx !== dragIdx) {
+                    reorderSegments(dragIdx, dropIdx);
+                }
+            }
+        }
+
+        const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
+        summaryDiv?.querySelectorAll('.trip-segment').forEach(s => {
+            s.classList.remove('dragging', 'drag-over');
+            // Reset iOS drag visual feedback
+            s.style.transform = '';
+            s.style.zIndex = '';
+            s.style.boxShadow = '';
+        });
+        dragIdx = null;
+        touchElement = null;
+    }
+
+    return { init };
+})();
+
+function reorderSegments(fromIdx, toIdx) {
+    UndoRedo.pushUndo();
+
+    const segments = AppState.selectedSegments;
+    const [moved] = segments.splice(fromIdx, 1);
+    segments.splice(toIdx, 0, moved);
+
+    // Renumber
+    segments.forEach((seg, i) => seg.segment = i + 1);
+    window.selectedSegments = segments;
+
+    redrawSelectedRoutes(false);
+    updateTripSummary();
+    updateProgressBar();
+    updateButtons();
+    TripStorage.save();
+}
 
 // =============================================================================
 // GLOBAL EXPORTS
@@ -2221,6 +3321,13 @@ window.filterByDestination = filterByDestination;
 window.clearDestinationFilter = clearDestinationFilter;
 window.editSegmentDate = editSegmentDate;
 window.clearTableFilters = clearTableFilters;
+window.exportTrip = exportTrip;
+window.importTrip = importTrip;
+window.redoLast = redoLast;
+window.shareTrip = () => TripShare.shareTrip();
+window.showCalendarHeatmap = showCalendarHeatmap;
+window.backToFlightList = backToFlightList;
+window.reorderSegments = reorderSegments;
 
 // =============================================================================
 // TABLE VIEW FUNCTIONALITY
@@ -2237,17 +3344,13 @@ const TableViewState = {
 
 // Tab switching
 function switchTab(tabName) {
-    // Update tab buttons
+    // Update tab buttons (including ARIA state)
     document.querySelectorAll('.tab-btn').forEach(btn => {
-        if (btn.dataset.tab === tabName) {
-            btn.classList.add('active');
-            btn.style.color = 'white';
-            btn.style.borderBottomColor = 'white';
-        } else {
-            btn.classList.remove('active');
-            btn.style.color = 'rgba(255,255,255,0.7)';
-            btn.style.borderBottomColor = 'transparent';
-        }
+        const isActive = btn.dataset.tab === tabName;
+        btn.classList.toggle('active', isActive);
+        btn.style.color = isActive ? 'white' : 'rgba(255,255,255,0.7)';
+        btn.style.borderBottomColor = isActive ? 'white' : 'transparent';
+        btn.setAttribute('aria-selected', String(isActive));
     });
     
     // Show/hide view containers

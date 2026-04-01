@@ -3,6 +3,7 @@ Seats.aero Partner API Client for Round-the-World Ticket Planning
 Uses the Partner API: https://developers.seats.aero/reference/getting-started-p
 """
 import os
+import time
 import requests
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Set
@@ -17,10 +18,14 @@ class SeatsAeroPartnerAPI:
     
     BASE_URL = "https://seats.aero/partnerapi"
     
+    # Default retry settings for transient failures
+    MAX_RETRIES = 3
+    RETRY_BACKOFF_BASE = 2  # seconds
+
     def __init__(self, api_key: Optional[str] = None, source: str = DEFAULT_SOURCE):
         """
         Initialize the Seats.aero Partner API client
-        
+
         Args:
             api_key: Your Seats.aero Partner API key. If not provided, will try to load from environment variable.
             source: The source for availability data (default: "qantas")
@@ -39,35 +44,69 @@ class SeatsAeroPartnerAPI:
         # Cache for storing fetched data
         self._cache = {}
         self._cache_expiry = {}
-        self._cache_ttl = 3600  # 1 hour cache TTL (saves API calls)
+        # Cache TTL is configurable via CACHE_TTL_SECONDS env var (default: 3600 = 1 hour)
+        self._cache_ttl = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
     
     def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
         """
-        Make a GET request to the Seats.aero Partner API
-        
+        Make a GET request to the Seats.aero Partner API with retry on transient failures.
+
+        Retries up to MAX_RETRIES times with exponential backoff on network errors
+        and 5xx server errors. Rate-limit (429) errors are raised immediately.
+
         Args:
             endpoint: API endpoint path
             params: Query parameters
-            
+
         Returns:
             JSON response from the API
         """
         url = f"{self.BASE_URL}/{endpoint.lstrip('/')}"
-        
+
         # Add source to params if not present
         if params is None:
             params = {}
         if 'source' not in params:
             params['source'] = self.source
-        
-        response = requests.get(url, headers=self.headers, params=params, verify=True, timeout=30)
-        
-        # Handle rate limiting gracefully
-        if response.status_code == 429:
-            raise Exception("API rate limit exceeded (1,000 calls/day). Please try again tomorrow or use the database fallback.")
-        
-        response.raise_for_status()
-        return response.json()
+
+        last_exception = None
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                response = requests.get(url, headers=self.headers, params=params, verify=True, timeout=30)
+
+                # Rate limiting — do not retry, raise immediately
+                if response.status_code == 429:
+                    raise Exception("API rate limit exceeded (1,000 calls/day). Please try again tomorrow or use the database fallback.")
+
+                # Retry on server errors (5xx)
+                if response.status_code >= 500 and attempt < self.MAX_RETRIES:
+                    wait = self.RETRY_BACKOFF_BASE ** attempt
+                    print(f"  Server error {response.status_code}, retrying in {wait}s (attempt {attempt + 1}/{self.MAX_RETRIES})...")
+                    time.sleep(wait)
+                    continue
+
+                response.raise_for_status()
+                return response.json()
+
+            except requests.exceptions.ConnectionError as e:
+                last_exception = e
+                if attempt < self.MAX_RETRIES:
+                    wait = self.RETRY_BACKOFF_BASE ** attempt
+                    print(f"  Connection error, retrying in {wait}s (attempt {attempt + 1}/{self.MAX_RETRIES})...")
+                    time.sleep(wait)
+                    continue
+                raise
+            except requests.exceptions.Timeout as e:
+                last_exception = e
+                if attempt < self.MAX_RETRIES:
+                    wait = self.RETRY_BACKOFF_BASE ** attempt
+                    print(f"  Request timeout, retrying in {wait}s (attempt {attempt + 1}/{self.MAX_RETRIES})...")
+                    time.sleep(wait)
+                    continue
+                raise
+
+        # Should not reach here, but just in case
+        raise last_exception or Exception("Request failed after retries")
     
     def _get_cache_key(self, *args):
         """Generate a cache key from arguments"""

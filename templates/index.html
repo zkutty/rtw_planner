@@ -2,9 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="color-scheme" content="light">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="RTW Planner">
     <title>Interactive RTW Trip Planner</title>
+    <!-- Prevent flash of wrong theme -->
+    <script>
+        if (localStorage.getItem('rtw_planner_dark_mode') === 'true' ||
+            (localStorage.getItem('rtw_planner_dark_mode') === null && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -13,29 +23,31 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <header>
+    <a href="#map" class="skip-link">Skip to map</a>
+    <div class="container" role="main">
+        <header role="banner">
             <h1>🌍 Round-the-World Trip Planner</h1>
             <p class="subtitle">oneworld Alliance • Interactive Map Planner</p>
-            <div style="text-align: center; margin-top: 0.5rem;">
-                <a href="/suggestions" style="color: #667eea; text-decoration: none; font-weight: 500;">🔍 Try Trip Suggestions</a>
+            <div style="text-align: center; margin-top: 0.5rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
+                <a href="/suggestions" style="color: #fff; text-decoration: none; font-weight: 500; opacity: 0.9;">🔍 Trip Suggestions</a>
+                <button id="dark-mode-toggle" title="Toggle dark mode" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; color: white; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 1rem; transition: background 0.2s;">🌙</button>
             </div>
             <!-- Tab Navigation -->
-            <div class="tab-navigation" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; border-bottom: 2px solid rgba(255,255,255,0.2);">
-                <button class="tab-btn active" data-tab="map-view" style="background: transparent; border: none; color: white; padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+            <nav class="tab-navigation" role="tablist" aria-label="View mode" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; border-bottom: 2px solid rgba(255,255,255,0.2);">
+                <button class="tab-btn active" data-tab="map-view" role="tab" aria-selected="true" aria-controls="map-view-container" style="background: transparent; border: none; color: white; padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
                     🗺️ Map View
                 </button>
-                <button class="tab-btn" data-tab="table-view" style="background: transparent; border: none; color: rgba(255,255,255,0.7); padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
+                <button class="tab-btn" data-tab="table-view" role="tab" aria-selected="false" aria-controls="table-view-container" style="background: transparent; border: none; color: rgba(255,255,255,0.7); padding: 0.75rem 1.5rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;">
                     📊 Table View
                 </button>
-            </div>
+            </nav>
         </header>
 
         <!-- Map View (default) -->
-        <div class="view-container active" id="map-view-container">
+        <div class="view-container active" id="map-view-container" role="tabpanel" aria-labelledby="map-view-tab">
         <div class="main-content">
             <!-- Control Panel -->
-            <div class="control-panel">
+            <div class="control-panel" role="complementary" aria-label="Trip configuration">
                 <div class="control-panel-content">
                 <div class="panel-section">
                     <h3>Trip Constraints</h3>
@@ -157,7 +169,7 @@
             <!-- Map Container -->
             <div class="map-container">
                 <!-- Loading Overlay -->
-                <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                <div id="loading-overlay" class="loading-overlay" style="display: none;" role="status" aria-live="polite" aria-label="Loading flights">
                     <div class="loading-content">
                         <div class="loading-spinner"></div>
                         <div class="loading-text">Loading flights...</div>
@@ -166,12 +178,12 @@
                         </div>
                     </div>
                 </div>
-                <div id="map"></div>
+                <div id="map" role="application" aria-label="Interactive flight map"></div>
             </div>
         </div>
         
         <!-- Bottom Panel - Trip Summary & Actions -->
-        <div class="bottom-panel" id="bottom-panel">
+        <div class="bottom-panel" id="bottom-panel" role="region" aria-label="Trip summary and actions">
             <!-- Expand/Collapse Toggle -->
             <button class="expand-toggle" id="expand-toggle" title="Expand/Collapse">
                 <span class="expand-icon">▲</span>
@@ -179,6 +191,21 @@
             </button>
             
             <div class="bottom-panel-content">
+                <!-- Progress Bar -->
+                <div id="trip-progress-bar" class="trip-progress-bar" style="display: none;">
+                    <div class="progress-track">
+                        <div class="progress-fill progress-distance-fill"></div>
+                    </div>
+                    <span class="progress-distance-label">0 / 35,000 mi</span>
+                    <div class="progress-checks">
+                        <span class="progress-check" data-check="segments" title="Min 3 segments">3+ seg</span>
+                        <span class="progress-check" data-check="atlantic" title="Atlantic crossing">ATL</span>
+                        <span class="progress-check" data-check="pacific" title="Pacific crossing">PAC</span>
+                        <span class="progress-check" data-check="continents" title="3+ continents">3+ cont</span>
+                        <span class="progress-check" data-check="return" title="Return to origin">RTN</span>
+                    </div>
+                </div>
+
                 <div class="bottom-panel-section summary-section">
                     <h3>Trip Summary</h3>
                     <div id="trip-summary">
@@ -186,16 +213,20 @@
                     </div>
                 </div>
                 <div class="bottom-panel-section">
-                    <div id="trip-requirements" style="padding: 0.75rem; background: #f9f9f9; border-radius: 4px; font-size: 0.8rem; display: none;">
-                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: #667eea;">oneworld RTW Requirements</h4>
+                    <div id="trip-requirements" style="padding: 0.75rem; background: var(--color-bg); border-radius: 4px; font-size: 0.8rem; display: none;">
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--color-primary);">oneworld RTW Requirements</h4>
                         <div id="requirements-status"></div>
                     </div>
                 </div>
                 <div class="bottom-panel-section">
                     <div class="button-group" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                        <button id="undo-btn" class="btn btn-secondary" disabled>← Undo Last</button>
+                        <button id="undo-btn" class="btn btn-secondary" disabled title="Undo (Ctrl+Z)">← Undo</button>
+                        <button id="redo-btn" class="btn btn-secondary" disabled title="Redo (Ctrl+Y)" style="opacity: 0.5;">Redo →</button>
                         <button id="clear-btn" class="btn btn-secondary" disabled>Clear All</button>
-                        <button id="copy-trip-btn" class="btn btn-secondary" disabled>📋 Copy Trip</button>
+                        <button id="copy-trip-btn" class="btn btn-secondary" disabled>📋 Copy</button>
+                        <button id="share-trip-btn" class="btn btn-secondary" disabled>🔗 Share</button>
+                        <button id="export-trip-btn" class="btn btn-secondary" disabled>💾 Export</button>
+                        <label class="btn btn-secondary" style="margin: 0; cursor: pointer;">📂 Import<input id="import-trip-input" type="file" accept=".json" style="display: none;"></label>
                         <button id="validate-btn" class="btn btn-primary" disabled>Validate Trip</button>
                     </div>
                 </div>
@@ -203,10 +234,10 @@
         </div>
 
         <!-- Flight Options Sidebar -->
-        <div class="sidebar" id="flight-sidebar">
+        <div class="sidebar" id="flight-sidebar" role="region" aria-label="Available flights">
             <div class="sidebar-header">
-                <h3>Available Flights</h3>
-                <button class="close-btn" id="close-sidebar">×</button>
+                <h3 id="sidebar-heading">Available Flights</h3>
+                <button class="close-btn" id="close-sidebar" aria-label="Close flight sidebar">×</button>
             </div>
             <!-- Flight Filters -->
             <div id="flight-filters" class="flight-filters" style="display: none;">
@@ -258,7 +289,7 @@
         <!-- End Map View Container -->
 
         <!-- Table View -->
-        <div class="view-container" id="table-view-container" style="display: none;">
+        <div class="view-container" id="table-view-container" role="tabpanel" aria-labelledby="table-view-tab" style="display: none;">
             <div class="table-view-wrapper">
                 <!-- Table View Controls -->
                 <div class="table-view-controls">
@@ -384,19 +415,26 @@
     </div>
 
     <!-- Validation Modal -->
-    <div id="validation-modal" class="modal">
+    <div id="validation-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="validation-heading">
         <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h2>Trip Validation</h2>
+            <span class="close-modal" role="button" aria-label="Close validation results" tabindex="0">&times;</span>
+            <h2 id="validation-heading">Trip Validation</h2>
             <div id="validation-results"></div>
         </div>
     </div>
 
     <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle Menu">☰</button>
+    <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle settings panel" aria-expanded="false">☰</button>
     
     <!-- Panel Overlay (for mobile) -->
     <div class="panel-overlay" id="panel-overlay"></div>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+        }
+    </script>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -413,15 +451,20 @@
         
         if (mobileMenuToggle && controlPanel && panelOverlay) {
             mobileMenuToggle.addEventListener('click', () => {
-                controlPanel.classList.toggle('open');
+                const isOpen = controlPanel.classList.toggle('open');
                 panelOverlay.classList.toggle('show');
-                mobileMenuToggle.textContent = controlPanel.classList.contains('open') ? '✕' : '☰';
+                mobileMenuToggle.textContent = isOpen ? '✕' : '☰';
+                mobileMenuToggle.setAttribute('aria-expanded', String(isOpen));
+                // iOS: lock body scroll when panel is open
+                document.body.classList.toggle('panel-open', isOpen);
             });
-            
+
             panelOverlay.addEventListener('click', () => {
                 controlPanel.classList.remove('open');
                 panelOverlay.classList.remove('show');
                 mobileMenuToggle.textContent = '☰';
+                mobileMenuToggle.setAttribute('aria-expanded', 'false');
+                document.body.classList.remove('panel-open');
             });
         }
         
@@ -433,6 +476,7 @@
                     controlPanel?.classList.remove('open');
                     panelOverlay?.classList.remove('show');
                     if (mobileMenuToggle) mobileMenuToggle.textContent = '☰';
+                    document.body.classList.remove('panel-open');
                 }
                 return originalLoadFlights.apply(this, args);
             };

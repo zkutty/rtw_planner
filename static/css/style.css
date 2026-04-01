@@ -59,6 +59,34 @@
 }
 
 /* =============================================================================
+   ACCESSIBILITY
+   ============================================================================= */
+
+.skip-link {
+    position: absolute;
+    top: -100%;
+    left: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-primary);
+    color: white;
+    border-radius: 0 0 8px 8px;
+    z-index: 99999;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top 0.2s;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+/* Ensure focus outlines are visible for keyboard navigation */
+*:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* =============================================================================
    RESET & BASE
    ============================================================================= */
 
@@ -1449,6 +1477,551 @@ header h1 {
 }
 
 /* =============================================================================
+   CALENDAR HEATMAP
+   ============================================================================= */
+
+.calendar-heatmap-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.calendar-heatmap-header h4 {
+    margin: 0;
+    color: var(--color-primary);
+    font-size: var(--font-size-md);
+}
+
+.calendar-legend {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.7rem;
+    color: var(--color-text-light);
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+}
+
+.cal-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cal-month {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.cal-month-title {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    margin-bottom: 0.4rem;
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.cal-day-header {
+    text-align: center;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    padding: 2px 0;
+}
+
+.cal-cell {
+    text-align: center;
+    font-size: 0.7rem;
+    padding: 4px 2px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cal-cell:hover:not(.cal-empty) {
+    transform: scale(1.2);
+    z-index: 1;
+}
+
+.cal-empty {
+    cursor: default;
+}
+
+.cal-none {
+    background: var(--color-border);
+    color: var(--color-text-muted);
+}
+
+.cal-low {
+    background: #a5d6a7;
+    color: #1b5e20;
+}
+
+.cal-med {
+    background: #66bb6a;
+    color: white;
+}
+
+.cal-high {
+    background: #2e7d32;
+    color: white;
+    font-weight: 600;
+}
+
+:root.dark .cal-none { background: #3a3a5c; color: #777; }
+:root.dark .cal-low { background: #2e5e3a; color: #a5d6a7; }
+:root.dark .cal-med { background: #357a38; color: white; }
+:root.dark .cal-high { background: #4caf50; color: white; }
+
+/* Calendar button in flight cards */
+.cal-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    margin-left: 6px;
+    transition: all 0.15s;
+    vertical-align: middle;
+}
+
+.cal-btn:hover {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* =============================================================================
+   DRAG-TO-REORDER SEGMENTS
+   ============================================================================= */
+
+.drag-handle {
+    cursor: grab;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-right: 0.3rem;
+    user-select: none;
+    vertical-align: middle;
+}
+
+.trip-segment[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.trip-segment.dragging {
+    opacity: 0.4;
+    border-style: dashed;
+}
+
+.trip-segment.drag-over {
+    border-color: var(--color-primary);
+    border-top: 3px solid var(--color-primary);
+    background: rgba(102, 126, 234, 0.08);
+}
+
+/* =============================================================================
+   VIRTUAL SCROLL
+   ============================================================================= */
+
+.virtual-scroll-container {
+    position: relative;
+    will-change: transform;
+}
+
+.virtual-scroll-items {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+
+.virtual-scroll-info {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-bg-white);
+    border-bottom: 1px solid var(--color-border);
+}
+
+/* =============================================================================
+   ONBOARDING WALKTHROUGH
+   ============================================================================= */
+
+.onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    pointer-events: none;
+}
+
+.onboarding-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    pointer-events: auto;
+}
+
+.onboarding-tooltip {
+    position: absolute;
+    background: var(--color-bg-white);
+    border-radius: 12px;
+    padding: 1.25rem;
+    max-width: 320px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    z-index: 10002;
+    pointer-events: auto;
+    animation: slideUp 0.3s ease;
+}
+
+.onboarding-tooltip p {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--color-text);
+    margin: 0.5rem 0 1rem;
+}
+
+.onboarding-step-indicator {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-primary);
+}
+
+.onboarding-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.onboarding-skip {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.4rem;
+}
+
+.onboarding-skip:hover {
+    color: var(--color-text);
+}
+
+.onboarding-next {
+    padding: 0.5rem 1.25rem;
+    font-size: 0.85rem;
+}
+
+.onboarding-highlight {
+    position: relative;
+    z-index: 10002;
+    box-shadow: 0 0 0 4px var(--color-primary), 0 0 0 8px rgba(102, 126, 234, 0.3);
+    border-radius: 6px;
+}
+
+/* =============================================================================
+   ANIMATED ROUTE DRAWING
+   ============================================================================= */
+
+.animated-route {
+    stroke-dasharray: 2000;
+    stroke-dashoffset: 2000;
+    animation: route-draw 1s ease-out forwards;
+}
+
+@keyframes route-draw {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* =============================================================================
+   LOADING SKELETONS
+   ============================================================================= */
+
+.skeleton-card {
+    pointer-events: none;
+}
+
+.skeleton-line {
+    background: linear-gradient(90deg, var(--color-border) 25%, var(--color-border-light) 50%, var(--color-border) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+:root.dark .skeleton-line {
+    background: linear-gradient(90deg, #3a3a5c 25%, #4a4a6c 50%, #3a3a5c 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* =============================================================================
+   VISUAL PROGRESS BAR
+   ============================================================================= */
+
+.trip-progress-bar {
+    width: 100%;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-white);
+    flex-wrap: wrap;
+}
+
+.progress-track {
+    flex: 1;
+    min-width: 120px;
+    height: 8px;
+    background: var(--color-border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+}
+
+.progress-fill.near-limit {
+    background: linear-gradient(90deg, var(--color-warning), #e65100);
+}
+
+.progress-fill.over-limit {
+    background: linear-gradient(90deg, var(--color-error), #b71c1c);
+}
+
+.progress-distance-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-light);
+    white-space: nowrap;
+}
+
+.progress-checks {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.progress-check {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: var(--color-border);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    transition: all 0.3s ease;
+}
+
+.progress-check.done {
+    background: var(--color-success);
+    color: white;
+}
+
+/* =============================================================================
+   DARK MODE
+   ============================================================================= */
+
+:root.dark {
+    --color-primary: #8b9cf7;
+    --color-primary-hover: #a0b0ff;
+    --color-secondary: #9b6fc5;
+    --color-success: #66bb6a;
+    --color-warning: #ffa726;
+    --color-error: #ef5350;
+    --color-text: #e0e0e0;
+    --color-text-light: #aaa;
+    --color-text-muted: #777;
+    --color-bg: #1a1a2e;
+    --color-bg-white: #222244;
+    --color-border: #3a3a5c;
+    --color-border-light: #2e2e4a;
+}
+
+:root.dark body {
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+:root.dark header {
+    background: linear-gradient(135deg, #2a2a4e 0%, #1a1a3e 100%);
+}
+
+:root.dark .control-panel {
+    background: var(--color-bg-white);
+    border-right-color: var(--color-border);
+}
+
+:root.dark .input-group label {
+    color: var(--color-text-light);
+}
+
+:root.dark .input-group input,
+:root.dark .input-group select {
+    background: var(--color-bg);
+    border-color: var(--color-border);
+    color: var(--color-text);
+}
+
+:root.dark .input-group small {
+    color: var(--color-text-muted);
+}
+
+:root.dark .btn-secondary {
+    background: #3a3a5c;
+    color: var(--color-text);
+}
+
+:root.dark .btn-secondary:hover:not(:disabled) {
+    background: #4a4a6c;
+}
+
+:root.dark .bottom-panel {
+    background: var(--color-bg-white);
+    border-top-color: var(--color-border);
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+}
+
+:root.dark #trip-summary {
+    background: var(--color-bg);
+}
+
+:root.dark .trip-segment {
+    background: #2a2a4e;
+    border-left-color: var(--color-primary);
+}
+
+:root.dark .sidebar {
+    background: var(--color-bg-white);
+    border-left-color: var(--color-border);
+    box-shadow: -2px 0 10px rgba(0,0,0,0.3);
+}
+
+:root.dark .sidebar-header {
+    border-bottom-color: var(--color-border);
+}
+
+:root.dark .flight-item {
+    background: var(--color-bg);
+    border-color: var(--color-border);
+}
+
+:root.dark .flight-item:hover {
+    border-color: var(--color-primary);
+}
+
+:root.dark .flight-item.selected {
+    border-color: var(--color-primary);
+    background: #2a2a5e;
+}
+
+:root.dark .modal-content {
+    background: var(--color-bg-white);
+    color: var(--color-text);
+}
+
+:root.dark .close-modal:hover {
+    color: var(--color-text);
+}
+
+:root.dark .close-btn:hover {
+    background: #3a3a5c;
+}
+
+:root.dark .flight-filters {
+    background: var(--color-bg);
+    border-bottom-color: var(--color-border);
+}
+
+:root.dark .table-view-wrapper {
+    background: var(--color-bg);
+}
+
+:root.dark .table-container {
+    background: var(--color-bg-white);
+}
+
+:root.dark .flights-table thead {
+    background: #3a3a5c;
+}
+
+:root.dark .flights-table tbody tr {
+    border-bottom-color: var(--color-border);
+}
+
+:root.dark .flights-table tbody tr:hover {
+    background: #2a2a4e;
+}
+
+:root.dark .table-filters {
+    background: var(--color-bg-white);
+}
+
+:root.dark .loading-overlay {
+    background: rgba(10, 10, 20, 0.9);
+}
+
+:root.dark .app-toast {
+    background: rgba(60, 60, 100, 0.95);
+}
+
+:root.dark .app-confirm-box {
+    background: var(--color-bg-white);
+    color: var(--color-text);
+}
+
+:root.dark .app-confirm-box p {
+    color: var(--color-text);
+}
+
+:root.dark .app-confirm-actions .btn-cancel {
+    background: #3a3a5c;
+    color: var(--color-text);
+}
+
+:root.dark .expand-toggle {
+    background: #3a3a5c;
+}
+
+:root.dark .expand-toggle:hover {
+    background: #4a4a6c;
+}
+
+:root.dark .progress-track {
+    background: #3a3a5c;
+}
+
+:root.dark .progress-check {
+    background: #3a3a5c;
+    color: var(--color-text-muted);
+}
+
+/* =============================================================================
    iOS — SAFE AREA INSETS (notch / home indicator support)
    viewport-fit=cover must be set in the HTML meta tag for these to take effect.
    ============================================================================= */
@@ -1465,5 +2038,262 @@ header h1 {
 
     .mobile-menu-toggle {
         bottom: calc(var(--bottom-panel-height) + env(safe-area-inset-bottom) + 10px);
+    }
+
+    .sidebar {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .control-panel {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .modal-content {
+        padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    }
+
+    header {
+        padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top));
+        padding-left: calc(var(--spacing-xl) + env(safe-area-inset-left));
+        padding-right: calc(var(--spacing-xl) + env(safe-area-inset-right));
+    }
+}
+
+/* =============================================================================
+   iOS-SPECIFIC UX OPTIMIZATIONS
+   ============================================================================= */
+
+/* Prevent iOS text selection on interactive elements */
+.btn,
+.tab-btn,
+.flight-item,
+.trip-segment,
+.expand-toggle,
+.cal-cell,
+.drag-handle,
+.mobile-menu-toggle,
+.close-btn,
+.close-modal {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Remove iOS tap highlight (the blue/grey flash on touch) */
+.btn,
+.tab-btn,
+.flight-item,
+.trip-segment,
+.cal-cell,
+.expand-toggle,
+.mobile-menu-toggle,
+.close-btn,
+.close-modal,
+a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent iOS callout (long-press context menu) on interactive items */
+.flight-item,
+.trip-segment,
+.cal-cell,
+.drag-handle {
+    -webkit-touch-callout: none;
+}
+
+/* Ensure all text inputs are 16px to prevent iOS Safari auto-zoom */
+input[type="text"],
+input[type="date"],
+input[type="number"],
+input[type="file"],
+select,
+textarea {
+    font-size: 16px;
+}
+
+/* Smooth momentum scrolling for all scroll containers on iOS */
+.sidebar-content,
+.control-panel-content,
+.bottom-panel.expanded,
+#trip-summary,
+.modal-content,
+.table-container,
+.flight-filters {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Overscroll containment — prevent scroll-chaining to body */
+.sidebar-content,
+.control-panel-content,
+#trip-summary,
+.modal-content,
+.table-container {
+    overscroll-behavior: contain;
+}
+
+/* Touch device enhancements */
+@media (hover: none) and (pointer: coarse) {
+    /* Larger calendar cells for touch */
+    .cal-cell {
+        min-height: 36px;
+        min-width: 36px;
+        font-size: 0.8rem;
+    }
+
+    /* Calendar button larger touch target */
+    .cal-btn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 4px 8px;
+        font-size: 0.85rem;
+    }
+
+    /* Drag handles need bigger touch targets */
+    .drag-handle {
+        font-size: 1.1rem;
+        padding: 4px 8px;
+        margin-right: 0.5rem;
+    }
+
+    /* Trip segments need more padding for touch drag */
+    .trip-segment {
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Expand toggle bigger on touch */
+    .expand-toggle {
+        padding: 8px 20px;
+        font-size: var(--font-size-sm);
+        top: -36px;
+    }
+
+    /* Onboarding buttons larger */
+    .onboarding-next {
+        min-height: 44px;
+        padding: 0.6rem 1.5rem;
+    }
+
+    .onboarding-skip {
+        min-height: 44px;
+        padding: 0.5rem 0.75rem;
+    }
+
+    /* Filter dropdowns in sidebar need adequate tap size */
+    .filter-group select,
+    .filter-group input {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    /* Tab buttons adequately sized */
+    .tab-btn {
+        min-height: 44px;
+        padding: 0.75rem 1.25rem;
+    }
+
+    /* Progress check badges — slightly larger for tappability */
+    .progress-check {
+        padding: 4px 8px;
+        font-size: 0.7rem;
+    }
+
+    /* Active/pressed state feedback for iOS (replaces hover) */
+    .flight-item:active {
+        transform: scale(0.98);
+        transition: transform 0.1s;
+    }
+
+    .btn:active:not(:disabled) {
+        transform: scale(0.95);
+        transition: transform 0.1s;
+    }
+
+    .cal-cell:active:not(.cal-empty) {
+        transform: scale(1.15);
+        transition: transform 0.1s;
+    }
+
+    .trip-segment:active {
+        background: rgba(102, 126, 234, 0.06);
+    }
+}
+
+/* iOS bottom-sheet style for mobile control panel */
+@media screen and (max-width: 480px) {
+    .control-panel {
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    }
+
+    /* Bottom sheet drag indicator */
+    .control-panel::before {
+        content: '';
+        display: block;
+        width: 36px;
+        height: 4px;
+        background: var(--color-border);
+        border-radius: 2px;
+        margin: 8px auto 4px;
+    }
+
+    /* Sidebar full-screen sheet on small phones */
+    .sidebar {
+        border-radius: 0;
+        top: 0;
+        bottom: 0;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.2);
+    }
+
+    /* Modal as bottom sheet on mobile */
+    .modal-content {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        margin: 0;
+        border-radius: 16px 16px 0 0;
+        max-height: 85vh;
+        width: 100%;
+        max-width: 100%;
+        animation: slideUpSheet 0.3s ease;
+    }
+
+    @keyframes slideUpSheet {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    /* Onboarding tooltip as bottom card on mobile */
+    .onboarding-tooltip {
+        position: fixed !important;
+        bottom: 20px !important;
+        left: 10px !important;
+        right: 10px !important;
+        top: auto !important;
+        max-width: none;
+    }
+
+    /* Calendar heatmap header stacks better on small screens */
+    .calendar-heatmap-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+}
+
+/* Prevent body scroll when modal/sidebar/panel is open (iOS needs this) */
+body.modal-open,
+body.sidebar-open,
+body.panel-open {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+}
+
+/* iOS standalone (Add to Home Screen) — extra top padding for status bar */
+@media (display-mode: standalone) {
+    header {
+        padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top, 20px));
     }
 }
