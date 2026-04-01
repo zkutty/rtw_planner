@@ -924,31 +924,34 @@ header h1 {
         bottom: var(--bottom-panel-height);
     }
 
-    /* Bottom panel — collapsed by default, just shows expand toggle */
+    /* Bottom panel — collapsed shows only the expand toggle bar */
     .bottom-panel {
         position: fixed;
         bottom: 0;
         left: 0;
         right: 0;
-        height: var(--bottom-panel-height);
-        overflow: hidden;
+        height: auto;
+        overflow: visible;
     }
 
-    .bottom-panel-content {
-        padding: var(--spacing-sm);
-        gap: var(--spacing-sm);
+    /* When collapsed, hide everything except the toggle */
+    .bottom-panel:not(.expanded) .bottom-panel-content {
         display: none;
+    }
+
+    /* Expand toggle fills the bar */
+    .bottom-panel .expand-toggle {
+        height: var(--bottom-panel-height);
+        padding: 0 16px;
     }
 
     .bottom-panel.expanded .bottom-panel-content {
         display: flex;
         flex-direction: column;
+        padding: var(--spacing-sm);
+        gap: var(--spacing-sm);
         min-width: 100%;
-    }
-
-    .bottom-panel.expanded {
-        height: auto;
-        max-height: 55vh;
+        max-height: 50vh;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
     }
@@ -969,11 +972,22 @@ header h1 {
         flex-wrap: wrap;
     }
 
-    /* Sidebar full width on tablet */
+    /* Sidebar — full-screen overlay on mobile, above everything */
     .sidebar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
         width: 100%;
-        max-width: 400px;
-        bottom: var(--bottom-panel-height);
+        max-width: 100%;
+        z-index: 2000;
+        border-left: none;
+        transform: translateX(100%);
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
     }
 
     /* Overlay when panels are open */
@@ -1085,14 +1099,6 @@ header h1 {
         min-width: 70px;
         font-size: var(--font-size-xs);
         padding: 0.4rem var(--spacing-sm);
-    }
-
-    /* Sidebar full-screen on phone */
-    .sidebar {
-        width: 100%;
-        max-width: 100%;
-        bottom: 0;
-        top: 0;
     }
 
     .sidebar-content {

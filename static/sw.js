@@ -4,7 +4,7 @@
  * Map tiles are cached opportunistically with a size limit.
  */
 
-const CACHE_VERSION = 'rtw-v1';
+const CACHE_VERSION = 'rtw-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
 const MAX_TILE_ENTRIES = 500;
