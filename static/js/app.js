@@ -1009,7 +1009,6 @@ async function loadFlightsFromAirport(origin, date) {
 }
 
 function showFlightSkeletons(origin) {
-    const sidebar = document.getElementById('flight-sidebar');
     const flightList = DOM.flightList || document.getElementById('flight-list');
     if (!flightList) return;
 
@@ -1462,7 +1461,6 @@ function filterByDestination(airport) {
     AppState.filteredDestination = airport;
     
     // Open sidebar to show filtered flights
-    const sidebar = document.getElementById('flight-sidebar');
     openSidebar();
     
     // Filter from allFlights (complete dataset) not currentFlights (already filtered)

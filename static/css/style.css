@@ -2281,14 +2281,13 @@ textarea {
     }
 }
 
-/* Prevent body scroll when modal/sidebar/panel is open (iOS needs this) */
+/* Prevent body scroll when modal/sidebar/panel is open */
 body.modal-open,
 body.sidebar-open,
 body.panel-open {
     overflow: hidden;
-    position: fixed;
-    width: 100%;
-    height: 100%;
+    /* touch-action prevents iOS rubber-band scroll without breaking layout */
+    touch-action: none;
 }
 
 /* iOS standalone (Add to Home Screen) — extra top padding for status bar */
