@@ -787,25 +787,43 @@ header h1 {
     :root {
         --control-panel-width: 280px;
         --sidebar-width: 100%;
-        --bottom-panel-height: 160px;
+        --bottom-panel-height: 48px;
     }
-    
+
     header {
-        padding: var(--spacing-md);
+        padding: var(--spacing-sm) var(--spacing-md);
     }
-    
+
     header h1 {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
+        margin-bottom: 0;
     }
-    
+
     .subtitle {
-        font-size: var(--font-size-xs);
+        display: none;
     }
-    
+
+    /* Compact header row: suggestions + dark mode inline with title */
+    header > div:nth-child(3) {
+        margin-top: 0.25rem !important;
+        gap: 0.5rem !important;
+    }
+
+    /* Tabs compact */
+    .tab-navigation {
+        margin-top: 0.5rem !important;
+        gap: 0.5rem !important;
+    }
+
+    .tab-btn {
+        padding: 0.5rem 1rem !important;
+        font-size: 0.8rem !important;
+    }
+
     .main-content {
         flex-direction: column;
     }
-    
+
     /* Control panel becomes a slide-out drawer */
     .control-panel {
         position: fixed;
@@ -817,18 +835,18 @@ header h1 {
         transform: translateX(-100%);
         transition: transform var(--transition-normal);
     }
-    
+
     .control-panel.open {
         transform: translateX(0);
     }
-    
+
     /* Show toggle button on mobile */
     .mobile-menu-toggle {
         display: flex;
         align-items: center;
         justify-content: center;
     }
-    
+
     /* Map takes full space */
     .map-container {
         position: absolute;
@@ -837,32 +855,71 @@ header h1 {
         right: 0;
         bottom: var(--bottom-panel-height);
     }
-    
-    /* Bottom panel adjustments */
+
+    /* Bottom panel — collapsed by default, just shows expand toggle */
     .bottom-panel {
         position: fixed;
         bottom: 0;
         left: 0;
         right: 0;
         height: var(--bottom-panel-height);
+        overflow: hidden;
     }
-    
+
     .bottom-panel-content {
         padding: var(--spacing-sm);
-        gap: var(--spacing-md);
+        gap: var(--spacing-sm);
+        display: none;
     }
-    
+
+    .bottom-panel.expanded .bottom-panel-content {
+        display: flex;
+        flex-direction: column;
+        min-width: 100%;
+    }
+
+    .bottom-panel.expanded {
+        height: auto;
+        max-height: 55vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .bottom-panel-section {
-        min-width: 200px;
+        min-width: 100%;
+        max-width: 100%;
     }
-    
+
+    /* Expand toggle — sits inside the collapsed bar, not floating above */
+    .expand-toggle {
+        position: static;
+        transform: none;
+        width: 100%;
+        border-radius: 0;
+        padding: 12px 16px;
+        font-size: var(--font-size-sm);
+        justify-content: center;
+        box-shadow: none;
+        top: auto;
+    }
+
+    /* Progress bar compact on mobile */
+    .trip-progress-bar {
+        padding: 0.4rem 0.75rem;
+        gap: 0.5rem;
+    }
+
+    .progress-checks {
+        flex-wrap: wrap;
+    }
+
     /* Sidebar full width on tablet */
     .sidebar {
         width: 100%;
         max-width: 400px;
         bottom: var(--bottom-panel-height);
     }
-    
+
     /* Overlay when panels are open */
     .panel-overlay {
         display: none;
@@ -874,7 +931,7 @@ header h1 {
         background: rgba(0,0,0,0.5);
         z-index: 1400;
     }
-    
+
     .panel-overlay.show {
         display: block;
     }
@@ -884,24 +941,20 @@ header h1 {
 @media screen and (max-width: 480px) {
     :root {
         --control-panel-width: 100%;
-        --bottom-panel-height: 140px;
+        --bottom-panel-height: 44px;
         --font-size-sm: 0.8rem;
         --font-size-xs: 0.7rem;
     }
-    
+
     header {
-        padding: var(--spacing-sm) var(--spacing-md);
+        padding: var(--spacing-xs) var(--spacing-sm);
     }
-    
+
     header h1 {
-        font-size: 1.1rem;
+        font-size: 1rem;
     }
-    
-    .subtitle {
-        display: none;
-    }
-    
-    /* Control panel full width */
+
+    /* Control panel full width as bottom sheet */
     .control-panel {
         width: 100%;
         max-height: 70vh;
@@ -909,141 +962,127 @@ header h1 {
         bottom: 0;
         transform: translateY(100%);
     }
-    
+
     .control-panel.open {
         transform: translateY(0);
     }
-    
+
     .control-panel-content {
         padding: var(--spacing-md);
     }
-    
+
     .panel-section {
         margin-bottom: var(--spacing-md);
         padding-bottom: var(--spacing-md);
     }
-    
+
     /* Map adjustments */
     .map-container {
         bottom: var(--bottom-panel-height);
     }
-    
-    /* Bottom panel - stack vertically */
-    .bottom-panel {
-        height: auto;
-        max-height: 50vh;
-        overflow-y: auto;
-    }
-    
-    .bottom-panel-content {
-        flex-direction: column;
-        min-width: 100%;
-        padding: var(--spacing-sm);
-    }
-    
-    .bottom-panel-section {
-        min-width: 100%;
-        max-width: 100%;
-    }
-    
+
+    /* Bottom panel — buttons row when expanded */
     .bottom-panel-section .button-group {
         flex-direction: row;
         flex-wrap: wrap;
     }
-    
+
     .bottom-panel-section .btn {
         flex: 1;
-        min-width: 80px;
+        min-width: 70px;
         font-size: var(--font-size-xs);
-        padding: var(--spacing-sm);
+        padding: 0.4rem var(--spacing-sm);
     }
-    
-    /* Sidebar full width */
+
+    /* Sidebar full-screen on phone */
     .sidebar {
         width: 100%;
         max-width: 100%;
         bottom: 0;
-        top: 60px;
+        top: 0;
     }
-    
+
     .sidebar-content {
         padding: var(--spacing-sm);
     }
-    
+
     /* Flight items compact */
     .flight-item {
         padding: var(--spacing-sm);
         margin-bottom: var(--spacing-sm);
     }
-    
+
     .flight-header {
         flex-direction: column;
         align-items: flex-start;
         gap: var(--spacing-xs);
     }
-    
+
     .flight-route {
         font-size: var(--font-size-sm);
     }
-    
+
     .flight-badge {
         font-size: 0.65rem;
         padding: 2px 6px;
     }
-    
-    /* Modal full screen on mobile */
-    .modal-content {
-        width: 95%;
-        max-width: 100%;
-        max-height: 90vh;
-        margin: var(--spacing-md);
-        padding: var(--spacing-lg);
-    }
-    
+
     /* Trip summary compact */
     #trip-summary {
-        max-height: 100px;
+        max-height: 120px;
         font-size: var(--font-size-xs);
     }
-    
+
     .trip-segment {
         padding: var(--spacing-sm);
     }
-    
+
     .trip-segment-header {
         font-size: var(--font-size-xs);
     }
-    
-    /* Mobile menu toggle position */
+
+    /* Mobile menu toggle — above the bottom bar, not overlapping content */
     .mobile-menu-toggle {
-        bottom: calc(var(--bottom-panel-height) + 10px);
-        width: 45px;
-        height: 45px;
-        font-size: 1.3rem;
+        bottom: calc(var(--bottom-panel-height) + 8px);
+        left: 12px;
+        width: 44px;
+        height: 44px;
+        font-size: 1.2rem;
     }
 }
 
 /* Landscape mode on mobile */
 @media screen and (max-width: 768px) and (orientation: landscape) {
     :root {
-        --bottom-panel-height: 100px;
+        --bottom-panel-height: 40px;
     }
-    
+
     header {
         padding: var(--spacing-xs) var(--spacing-md);
     }
-    
+
     header h1 {
-        font-size: 1rem;
+        font-size: 0.95rem;
     }
-    
-    .bottom-panel-content {
+
+    /* Hide tabs row in landscape to save space */
+    .tab-navigation {
+        display: none !important;
+    }
+
+    .bottom-panel.expanded .bottom-panel-content {
         flex-direction: row;
         overflow-x: auto;
+        flex-wrap: nowrap;
     }
-    
-    .bottom-panel-section {
-        min-width: 180px;
+
+    .bottom-panel.expanded .bottom-panel-section {
+        min-width: 200px;
+        max-width: 280px;
+    }
+
+    .bottom-panel.expanded {
+        max-height: 45vh;
     }
 }
 
