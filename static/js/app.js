@@ -213,6 +213,19 @@ const DOM = {};
 // UTILITY FUNCTIONS
 // =============================================================================
 
+/** iOS body scroll lock — toggle when sidebar/modal opens */
+function openSidebar() {
+    const sidebar = document.getElementById('flight-sidebar');
+    sidebar?.classList.add('open');
+    document.body.classList.add('sidebar-open');
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById('flight-sidebar');
+    sidebar?.classList.remove('open');
+    document.body.classList.remove('sidebar-open');
+}
+
 /**
  * Calculate great-circle distance between two coordinates (Haversine formula)
  */
@@ -1000,7 +1013,7 @@ function showFlightSkeletons(origin) {
     const flightList = DOM.flightList || document.getElementById('flight-list');
     if (!flightList) return;
 
-    sidebar?.classList.add('open');
+    openSidebar();
 
     const skeletonCards = Array.from({ length: 5 }, () => `
         <div class="flight-item skeleton-card">
@@ -1032,7 +1045,7 @@ function displayFlights(flights, origin, keepSidebarOpen = false, direction = 'f
     const sidebar = document.getElementById('flight-sidebar');
     const flightList = document.getElementById('flight-list');
     
-    if (!keepSidebarOpen) sidebar.classList.add('open');
+    if (!keepSidebarOpen) openSidebar();
     
     if (flights.length === 0) {
         const message = direction === 'backward' 
@@ -1450,7 +1463,7 @@ function filterByDestination(airport) {
     
     // Open sidebar to show filtered flights
     const sidebar = document.getElementById('flight-sidebar');
-    if (sidebar) sidebar.classList.add('open');
+    openSidebar();
     
     // Filter from allFlights (complete dataset) not currentFlights (already filtered)
     const flightsToFilter = AppState.allFlights && AppState.allFlights.length > 0 
@@ -2129,6 +2142,7 @@ async function validateTrip() {
         
         resultsDiv.innerHTML = html;
         modal.classList.add('show');
+        document.body.classList.add('modal-open');
     } catch (error) {
         console.error('Error validating trip:', error);
         showError('Failed to validate trip');
@@ -2264,10 +2278,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('copy-trip-btn')?.addEventListener('click', copyTripToClipboard);
     document.getElementById('validate-btn')?.addEventListener('click', validateTrip);
     
-    // Sidebar close
-    document.getElementById('close-sidebar')?.addEventListener('click', () => {
-        document.getElementById('flight-sidebar').classList.remove('open');
-    });
+    // Sidebar close — with iOS body scroll lock
+    document.getElementById('close-sidebar')?.addEventListener('click', closeSidebar);
 
     // Touch support for flight item route highlighting (mirrors mouse hover behaviour)
     // Uses event delegation on the flight list container so it works for dynamically rendered items.
@@ -2305,13 +2317,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Modal close
+    // Modal close — with iOS body scroll lock
     document.querySelector('.close-modal')?.addEventListener('click', () => {
         document.getElementById('validation-modal').classList.remove('show');
+        document.body.classList.remove('modal-open');
     });
-    
+
     document.getElementById('validation-modal')?.addEventListener('click', (e) => {
-        if (e.target.id === 'validation-modal') e.target.classList.remove('show');
+        if (e.target.id === 'validation-modal') {
+            e.target.classList.remove('show');
+            document.body.classList.remove('modal-open');
+        }
     });
     
     // Tab navigation
@@ -2882,10 +2898,9 @@ async function showCalendarHeatmap(origin, destination) {
     const ed = endDateRaw ? new Date(endDateRaw) : new Date(sd.getTime() + 30 * 86400000);
     const endDate = ed.toISOString().slice(0, 10);
 
-    const sidebar = document.getElementById('flight-sidebar');
     const flightList = DOM.flightList || document.getElementById('flight-list');
     if (!flightList) return;
-    sidebar?.classList.add('open');
+    openSidebar();
 
     flightList.innerHTML = `
         <div style="padding: 1rem; text-align: center;">
@@ -3198,21 +3213,33 @@ const SegmentDrag = (() => {
         const seg = e.target.closest('.trip-segment[data-segment-index]');
         if (!seg) return;
 
-        // Only start drag on the segment header area (not buttons)
-        if (e.target.closest('button')) return;
+        // Only start drag on the drag handle or segment header (not buttons)
+        if (e.target.closest('button') && !e.target.closest('.drag-handle')) return;
 
         dragIdx = parseInt(seg.dataset.segmentIndex);
         touchStartY = e.touches[0].clientY;
         touchElement = seg;
 
-        // Long-press to initiate drag
+        // Long-press to initiate drag (400ms for iOS — avoids conflict with scroll)
         seg._touchTimer = setTimeout(() => {
             seg.classList.add('dragging');
-            e.preventDefault();
-        }, 300);
+            // Visual feedback: scale up slightly as drag-start indicator
+            seg.style.transform = 'scale(1.03)';
+            seg.style.zIndex = '100';
+            seg.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
+        }, 400);
     }
 
     function onTouchMove(e) {
+        // Cancel long-press if finger moves more than 10px before timer fires
+        if (dragIdx !== null && touchElement && !touchElement.classList.contains('dragging')) {
+            const dy = Math.abs(e.touches[0].clientY - touchStartY);
+            if (dy > 10 && touchElement._touchTimer) {
+                clearTimeout(touchElement._touchTimer);
+                touchElement._touchTimer = null;
+            }
+            return;
+        }
         if (dragIdx === null || !touchElement?.classList.contains('dragging')) {
             if (touchElement?._touchTimer) clearTimeout(touchElement._touchTimer);
             return;
@@ -3246,6 +3273,10 @@ const SegmentDrag = (() => {
         const summaryDiv = DOM.tripSummary || document.getElementById('trip-summary');
         summaryDiv?.querySelectorAll('.trip-segment').forEach(s => {
             s.classList.remove('dragging', 'drag-over');
+            // Reset iOS drag visual feedback
+            s.style.transform = '';
+            s.style.zIndex = '';
+            s.style.boxShadow = '';
         });
         dragIdx = null;
         touchElement = null;

@@ -2039,4 +2039,261 @@ header h1 {
     .mobile-menu-toggle {
         bottom: calc(var(--bottom-panel-height) + env(safe-area-inset-bottom) + 10px);
     }
+
+    .sidebar {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .control-panel {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .modal-content {
+        padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    }
+
+    header {
+        padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top));
+        padding-left: calc(var(--spacing-xl) + env(safe-area-inset-left));
+        padding-right: calc(var(--spacing-xl) + env(safe-area-inset-right));
+    }
+}
+
+/* =============================================================================
+   iOS-SPECIFIC UX OPTIMIZATIONS
+   ============================================================================= */
+
+/* Prevent iOS text selection on interactive elements */
+.btn,
+.tab-btn,
+.flight-item,
+.trip-segment,
+.expand-toggle,
+.cal-cell,
+.drag-handle,
+.mobile-menu-toggle,
+.close-btn,
+.close-modal {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Remove iOS tap highlight (the blue/grey flash on touch) */
+.btn,
+.tab-btn,
+.flight-item,
+.trip-segment,
+.cal-cell,
+.expand-toggle,
+.mobile-menu-toggle,
+.close-btn,
+.close-modal,
+a {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent iOS callout (long-press context menu) on interactive items */
+.flight-item,
+.trip-segment,
+.cal-cell,
+.drag-handle {
+    -webkit-touch-callout: none;
+}
+
+/* Ensure all text inputs are 16px to prevent iOS Safari auto-zoom */
+input[type="text"],
+input[type="date"],
+input[type="number"],
+input[type="file"],
+select,
+textarea {
+    font-size: 16px;
+}
+
+/* Smooth momentum scrolling for all scroll containers on iOS */
+.sidebar-content,
+.control-panel-content,
+.bottom-panel.expanded,
+#trip-summary,
+.modal-content,
+.table-container,
+.flight-filters {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Overscroll containment — prevent scroll-chaining to body */
+.sidebar-content,
+.control-panel-content,
+#trip-summary,
+.modal-content,
+.table-container {
+    overscroll-behavior: contain;
+}
+
+/* Touch device enhancements */
+@media (hover: none) and (pointer: coarse) {
+    /* Larger calendar cells for touch */
+    .cal-cell {
+        min-height: 36px;
+        min-width: 36px;
+        font-size: 0.8rem;
+    }
+
+    /* Calendar button larger touch target */
+    .cal-btn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 4px 8px;
+        font-size: 0.85rem;
+    }
+
+    /* Drag handles need bigger touch targets */
+    .drag-handle {
+        font-size: 1.1rem;
+        padding: 4px 8px;
+        margin-right: 0.5rem;
+    }
+
+    /* Trip segments need more padding for touch drag */
+    .trip-segment {
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    /* Expand toggle bigger on touch */
+    .expand-toggle {
+        padding: 8px 20px;
+        font-size: var(--font-size-sm);
+        top: -36px;
+    }
+
+    /* Onboarding buttons larger */
+    .onboarding-next {
+        min-height: 44px;
+        padding: 0.6rem 1.5rem;
+    }
+
+    .onboarding-skip {
+        min-height: 44px;
+        padding: 0.5rem 0.75rem;
+    }
+
+    /* Filter dropdowns in sidebar need adequate tap size */
+    .filter-group select,
+    .filter-group input {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    /* Tab buttons adequately sized */
+    .tab-btn {
+        min-height: 44px;
+        padding: 0.75rem 1.25rem;
+    }
+
+    /* Progress check badges — slightly larger for tappability */
+    .progress-check {
+        padding: 4px 8px;
+        font-size: 0.7rem;
+    }
+
+    /* Active/pressed state feedback for iOS (replaces hover) */
+    .flight-item:active {
+        transform: scale(0.98);
+        transition: transform 0.1s;
+    }
+
+    .btn:active:not(:disabled) {
+        transform: scale(0.95);
+        transition: transform 0.1s;
+    }
+
+    .cal-cell:active:not(.cal-empty) {
+        transform: scale(1.15);
+        transition: transform 0.1s;
+    }
+
+    .trip-segment:active {
+        background: rgba(102, 126, 234, 0.06);
+    }
+}
+
+/* iOS bottom-sheet style for mobile control panel */
+@media screen and (max-width: 480px) {
+    .control-panel {
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    }
+
+    /* Bottom sheet drag indicator */
+    .control-panel::before {
+        content: '';
+        display: block;
+        width: 36px;
+        height: 4px;
+        background: var(--color-border);
+        border-radius: 2px;
+        margin: 8px auto 4px;
+    }
+
+    /* Sidebar full-screen sheet on small phones */
+    .sidebar {
+        border-radius: 0;
+        top: 0;
+        bottom: 0;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.2);
+    }
+
+    /* Modal as bottom sheet on mobile */
+    .modal-content {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        margin: 0;
+        border-radius: 16px 16px 0 0;
+        max-height: 85vh;
+        width: 100%;
+        max-width: 100%;
+        animation: slideUpSheet 0.3s ease;
+    }
+
+    @keyframes slideUpSheet {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    /* Onboarding tooltip as bottom card on mobile */
+    .onboarding-tooltip {
+        position: fixed !important;
+        bottom: 20px !important;
+        left: 10px !important;
+        right: 10px !important;
+        top: auto !important;
+        max-width: none;
+    }
+
+    /* Calendar heatmap header stacks better on small screens */
+    .calendar-heatmap-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+}
+
+/* Prevent body scroll when modal/sidebar/panel is open (iOS needs this) */
+body.modal-open,
+body.sidebar-open,
+body.panel-open {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+}
+
+/* iOS standalone (Add to Home Screen) — extra top padding for status bar */
+@media (display-mode: standalone) {
+    header {
+        padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top, 20px));
+    }
 }

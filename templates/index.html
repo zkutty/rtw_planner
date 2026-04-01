@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="color-scheme" content="light">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="RTW Planner">
     <title>Interactive RTW Trip Planner</title>
     <!-- Prevent flash of wrong theme -->
     <script>
@@ -452,6 +455,8 @@
                 panelOverlay.classList.toggle('show');
                 mobileMenuToggle.textContent = isOpen ? '✕' : '☰';
                 mobileMenuToggle.setAttribute('aria-expanded', String(isOpen));
+                // iOS: lock body scroll when panel is open
+                document.body.classList.toggle('panel-open', isOpen);
             });
 
             panelOverlay.addEventListener('click', () => {
@@ -459,6 +464,7 @@
                 panelOverlay.classList.remove('show');
                 mobileMenuToggle.textContent = '☰';
                 mobileMenuToggle.setAttribute('aria-expanded', 'false');
+                document.body.classList.remove('panel-open');
             });
         }
         
@@ -470,6 +476,7 @@
                     controlPanel?.classList.remove('open');
                     panelOverlay?.classList.remove('show');
                     if (mobileMenuToggle) mobileMenuToggle.textContent = '☰';
+                    document.body.classList.remove('panel-open');
                 }
                 return originalLoadFlights.apply(this, args);
             };
