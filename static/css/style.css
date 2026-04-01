@@ -370,29 +370,42 @@ header h1 {
     max-height: none;
 }
 
-/* Expand Toggle Button */
+/* Expand Toggle Button — full-width bar by default (mobile-first) */
 .expand-toggle {
-    position: absolute;
-    top: -30px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: static;
     background: var(--color-primary);
     color: white;
     border: none;
-    border-radius: 8px 8px 0 0;
-    padding: 4px 16px;
-    font-size: var(--font-size-xs);
+    border-radius: 0;
+    padding: 12px 16px;
+    font-size: var(--font-size-sm);
     cursor: pointer;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
     z-index: 1001;
+    width: 100%;
     transition: all var(--transition-fast);
 }
 
 .expand-toggle:hover {
     background: var(--color-primary-hover);
+}
+
+/* Desktop: floating pill above the bottom panel */
+@media screen and (min-width: 769px) {
+    .expand-toggle {
+        position: absolute;
+        top: -30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: auto;
+        border-radius: 8px 8px 0 0;
+        padding: 4px 16px;
+        font-size: var(--font-size-xs);
+        box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
+    }
 }
 
 .expand-icon {
@@ -945,18 +958,6 @@ header h1 {
         max-width: 100%;
     }
 
-    /* Expand toggle — sits inside the collapsed bar, not floating above */
-    .expand-toggle {
-        position: static;
-        transform: none;
-        width: 100%;
-        border-radius: 0;
-        padding: 12px 16px;
-        font-size: var(--font-size-sm);
-        justify-content: center;
-        box-shadow: none;
-        top: auto;
-    }
 
     /* Progress bar compact on mobile */
     .trip-progress-bar {
@@ -2287,12 +2288,6 @@ textarea {
         margin-bottom: 0.5rem;
     }
 
-    /* Expand toggle bigger on touch */
-    .expand-toggle {
-        padding: 8px 20px;
-        font-size: var(--font-size-sm);
-        top: -36px;
-    }
 
     /* Onboarding buttons larger */
     .onboarding-next {
